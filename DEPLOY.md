@@ -23,12 +23,14 @@ bloquea su acceso.
 
 ## Antes de subir
 
-1. **Formulario → tu automatización:** en `index.html`, reemplazá
-   `[[WEBHOOK_URL]]` por la URL de producción del webhook (n8n, Make, etc.).
-   Mientras no esté, el formulario avisa que no está conectado y ofrece
-   escribir por Instagram.
+1. **Formulario → n8n:** ya está conectado al workflow
+   *VEZZA · Formulario de contacto*
+   (`https://vmezza.app.n8n.cloud/webhook/vezza-contacto`). Ese workflow valida
+   los datos, guarda cada contacto en la tabla `vezza_contactos` y te avisa por
+   mail a `info@vezzadev.com` (enviado por SMTP de Hostinger). Tiene que quedar **activo** en n8n; si lo desactivás, el formulario
+   muestra un error.
 
-   Lo que tiene que saber la automatización:
+   Si algún día cambiás de automatización, esto es lo que tiene que cumplir:
    - Recibe un `POST` `application/x-www-form-urlencoded` con los campos
      `nombre`, `email`, `tipo`, `mensaje`, `origen` y `website`.
    - `website` es una trampa anti-spam. Si llega con texto, es un bot y hay que

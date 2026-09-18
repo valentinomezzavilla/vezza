@@ -304,13 +304,13 @@
         </div>
 
         <!--
-          Envío a tu automatización (webhook de n8n, Make, etc.).
-          Reemplazá [[WEBHOOK_URL]] por la URL del webhook. Llega un POST
+          Envío al workflow de n8n "VEZZA · Formulario de contacto" (valida, guarda en la
+          tabla vezza_contactos y avisa por mail). Llega un POST
           application/x-www-form-urlencoded con: nombre, email, tipo, mensaje,
           origen y website (honeypot: si viene con texto, es spam y hay que descartarlo).
           El webhook tiene que responder 2xx y permitir CORS desde https://vezzadev.com.
         -->
-        <form class="form" action="[[WEBHOOK_URL]]" method="POST" novalidate data-form>
+        <form class="form" action="https://vmezza.app.n8n.cloud/webhook/vezza-contacto" method="POST" novalidate data-form>
           <input type="hidden" name="origen" value="vezzadev.com">
 
           <!-- Honeypot anti-spam: invisible para personas; si se completa, el envío se descarta -->
