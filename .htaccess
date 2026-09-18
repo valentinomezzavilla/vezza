@@ -24,7 +24,12 @@ DirectoryIndex index.html
 </IfModule>
 
 # ---------- No servir archivos internos ----------
-<FilesMatch "\.(md|log|bak)$">
+# El deploy por Git de Hostinger copia el repo entero en public_html:
+# se ocultan el historial (.git), las piezas originales (imgs/) y los .md.
+<IfModule mod_alias.c>
+  RedirectMatch 404 (?i)^/(\.git|imgs)(/|$)
+</IfModule>
+<FilesMatch "(^\.git|\.(md|log|bak)$)">
   Require all denied
 </FilesMatch>
 

@@ -1,5 +1,21 @@
 # Subir VEZZA a Hostinger
 
+## Opción recomendada: publicación automática con Git
+
+El sitio se publica solo desde el repo `github.com/valentinomezzavilla/vezza`,
+rama `main`. Cada `git push` actualiza `public_html`.
+
+- **Configuración:** hPanel → Avanzado → **Git**. Repositorio
+  `https://github.com/valentinomezzavilla/vezza.git`, rama `main`,
+  directorio vacío (`public_html`). La **implementación automática** está
+  activada con un webhook en GitHub (Settings → Webhooks).
+- **Qué queda público:** Hostinger copia el repo entero, pero `.htaccess`
+  bloquea `.git/`, `imgs/` y los `.md`.
+- **Si cambiás CSS o JS:** igual tenés que subir el `?v=N` en `index.html`
+  antes de hacer push.
+
+## Opción manual: subir los archivos
+
 ## Qué subir
 
 Subí estos archivos y carpetas a `public_html`:
