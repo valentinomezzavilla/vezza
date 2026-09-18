@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Isotipo </> de VEZZA, con trazos más gruesos para que se lea a 16 px -->
+  <rect width="64" height="64" rx="14" fill="#F5F3EE"/>
+  <g fill="none" stroke-width="5.5">
+    <polyline points="21,14 9.5,32 21,50" stroke="#15131C"/>
+    <polyline points="43,14 54.5,32 43,50" stroke="#15131C"/>
+    <line x1="27.9" y1="42.2" x2="36.1" y2="21.8" stroke="#3D2FE0" stroke-width="5"/>
+  </g>
+</svg>

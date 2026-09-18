@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es-AR" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!--
+    SITE_URL = https://vezzadev.com
+    Si cambia el dominio, buscá y reemplazá "https://vezzadev.com" en:
+    index.html (este archivo), sitemap.xml y robots.txt.
+  -->
+
+  <title>VEZZA · Desarrollo web y software a medida</title>
+  <meta name="description" content="VEZZA: landings, sitios, e-commerce, apps y software a medida que funcionan de verdad. Te acompaño de la idea al lanzamiento. Pedí tu propuesta sin costo.">
+  <link rel="canonical" href="https://vezzadev.com/">
+  <meta name="theme-color" content="#F5F3EE">
+  <meta name="color-scheme" content="light">
+
+  <!-- Íconos -->
+  <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+
+  <!-- Open Graph / redes -->
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_AR">
+  <meta property="og:site_name" content="VEZZA">
+  <meta property="og:url" content="https://vezzadev.com/">
+  <meta property="og:title" content="VEZZA · Te acompaño de la idea al lanzamiento">
+  <meta property="og:description" content="Landings, sitios, e-commerce, apps y software a medida que funcionan de verdad.">
+  <meta property="og:image" content="https://vezzadev.com/assets/img/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="VEZZA: Te acompaño de la idea al lanzamiento.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="VEZZA · Te acompaño de la idea al lanzamiento">
+  <meta name="twitter:description" content="Landings, sitios, e-commerce, apps y software a medida que funcionan de verdad.">
+  <meta name="twitter:image" content="https://vezzadev.com/assets/img/og-image.png">
+
+  <!-- Tipografías: Manrope (titulares y texto) + Sora (lista de servicios) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=Sora:wght@600&display=swap">
+
+  <!-- Cambiá ?v= cada vez que subas una versión nueva del CSS o JS -->
+  <link rel="stylesheet" href="css/styles.css?v=1">
+
+  <!-- Marca que hay JS antes de pintar (evita parpadeos del menú y los servicios) -->
+  <script>document.documentElement.className = 'js';</script>
+  <script src="js/main.js?v=1" defer></script>
+
+  <!-- Datos estructurados -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ProfessionalService",
+    "name": "VEZZA",
+    "url": "https://vezzadev.com/",
+    "logo": "https://vezzadev.com/assets/icons/apple-touch-icon.png",
+    "image": "https://vezzadev.com/assets/img/og-image.png",
+    "description": "Desarrollo de landing pages, sitios web, e-commerce, apps web y móviles, software a medida y automatizaciones.",
+    "slogan": "Te acompaño de la idea al lanzamiento.",
+    "address": { "@type": "PostalAddress", "addressCountry": "AR" },
+    "areaServed": "Worldwide",
+    "sameAs": ["https://www.instagram.com/vezza.dev/"],
+    "hasOfferCatalog": {
+      "@type": "OfferCatalog",
+      "name": "Servicios",
+      "itemListElement": [
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Landing pages" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Sitios web completos" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "E-commerce" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Apps web y móviles" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Software a medida" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Automatizaciones" } }
+      ]
+    }
+  }
+  </script>
+</head>
+
+<body>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+  <!-- ============ HEADER ============ -->
+  <header class="site-header" data-header>
+    <div class="container site-header__inner">
+      <a class="brand" href="#inicio" aria-label="VEZZA, ir al inicio">
+        <!-- Isotipo </> + wordmark. La barra "/" se inclina una vez al cargar. -->
+        <svg class="logo" viewBox="0 0 1024 264" width="124" height="32" aria-hidden="true" focusable="false">
+          <g class="logo__iso" fill="none" stroke-width="21">
+            <polyline class="logo__chev" points="97,12 23,132 97,252"/>
+            <polyline class="logo__chev" points="223,12 297,132 223,252"/>
+            <line class="logo__slash" x1="159.5" y1="72" x2="159.5" y2="193.5" stroke-width="17" transform="rotate(21.8 159.5 132.75)"/>
+          </g>
+          <g transform="translate(412 66) scale(1.4667)">
+            <polygon class="logo__ink" points="0,0 24,0 43,72 48,72 65,0 88,0 64,90 26,90"/>
+            <polygon class="logo__ink" points="99,0 156,0 156,18 121,18 121,35 154,35 154,53 121,53 121,72 157,72 157,90 99,90"/>
+            <polygon class="logo__acc" points="167,0 238,0 238,16 194,72 238,72 238,90 165,90 165,74 208,18 167,18"/>
+            <polygon class="logo__acc" points="246,0 317,0 317,16 273,72 317,72 317,90 244,90 244,74 287,18 246,18"/>
+            <path class="logo__ink" fill-rule="evenodd" d="M320 90 349 0h37l31 90h-25l-6-20h-37l-6 20Zm35-39h25l-10-33h-5Z"/>
+          </g>
+        </svg>
+      </a>
+
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-menu-toggle>
+        <span class="menu-toggle__bars" aria-hidden="true"></span>
+        <span class="menu-toggle__label">Menú</span>
+      </button>
+
+      <nav class="site-nav" id="site-nav" aria-label="Principal" data-nav>
+        <ul class="site-nav__list" role="list">
+          <li><a class="site-nav__link" href="#servicios">Servicios</a></li>
+          <li><a class="site-nav__link" href="#proceso">Proceso</a></li>
+          <li><a class="site-nav__link" href="#tu-marca">Tu marca</a></li>
+          <li><a class="site-nav__link" href="#contacto">Contacto</a></li>
+        </ul>
+        <a class="btn btn--primary site-nav__cta" href="#contacto">Contanos tu idea</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="contenido" tabindex="-1">
+
+    <!-- ============ HERO ============ -->
+    <section class="hero" id="inicio" aria-labelledby="hero-title">
+      <div class="container">
+        <p class="label">Desarrollo web y software a medida</p>
+
+        <!-- Cada grupo sube desde una máscara; el <br> fuerza "lanzamiento." a su propia línea -->
+        <h1 class="hero__title" id="hero-title">
+          <span class="rise"><span class="rise__in">Te acompaño</span></span>
+          <span class="rise"><span class="rise__in">de la</span></span>
+          <span class="rise"><span class="rise__in">idea al</span></span><br>
+          <span class="rise rise--mark"><span class="rise__in mark">lanzamiento.</span></span>
+        </h1>
+
+        <p class="hero__lead lead">Landings, sitios, e-commerce, apps y software a medida que funcionan de verdad.</p>
+
+        <div class="hero__actions">
+          <a class="btn btn--primary btn--lg" href="#contacto">Contanos tu idea</a>
+          <a class="link-arrow" href="#servicios">Ver servicios <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SERVICIOS ============ -->
+    <section class="section services" id="servicios" aria-labelledby="servicios-title">
+      <div class="container">
+        <!-- Como en el post: el título es una etiqueta y el protagonismo lo tienen las filas -->
+        <h2 class="label services__title" id="servicios-title">¿Qué hacemos?</h2>
+
+        <ol class="services__list" role="list">
+          <li class="service" data-service>
+            <h3 class="service__heading">
+              <button class="service__toggle" type="button" aria-expanded="false" aria-controls="svc-1">
+                <span class="service__num" aria-hidden="true">01</span>
+                <span class="service__name">Landing pages</span>
+                <span class="service__icon" aria-hidden="true"></span>
+              </button>
+            </h3>
+            <div class="service__desc" id="svc-1"><div><p>Una página pensada para que quien entre te escriba, te compre o se anote.</p></div></div>
+          </li>
+          <li class="service" data-service>
+            <h3 class="service__heading">
+              <button class="service__toggle" type="button" aria-expanded="false" aria-controls="svc-2">
+                <span class="service__num" aria-hidden="true">02</span>
+                <span class="service__name">Sitios web completos</span>
+                <span class="service__icon" aria-hidden="true"></span>
+              </button>
+            </h3>
+            <div class="service__desc" id="svc-2"><div><p>Tu negocio explicado en varias páginas, fácil de encontrar en Google y de actualizar.</p></div></div>
+          </li>
+          <li class="service" data-service>
+            <h3 class="service__heading">
+              <button class="service__toggle" type="button" aria-expanded="false" aria-controls="svc-3">
+                <span class="service__num" aria-hidden="true">03</span>
+                <span class="service__name">E-commerce</span>
+                <span class="service__icon" aria-hidden="true"></span>
+              </button>
+            </h3>
+            <div class="service__desc" id="svc-3"><div><p>Tu tienda online con pagos, envíos y stock en orden, sin depender de un marketplace.</p></div></div>
+          </li>
+          <li class="service" data-service>
+            <h3 class="service__heading">
+              <button class="service__toggle" type="button" aria-expanded="false" aria-controls="svc-4">
+                <span class="service__num" aria-hidden="true">04</span>
+                <span class="service__name">Apps web y móviles</span>
+                <span class="service__icon" aria-hidden="true"></span>
+              </button>
+            </h3>
+            <div class="service__desc" id="svc-4"><div><p>Una app para que tus clientes o tu equipo resuelvan todo desde el celular o la compu.</p></div></div>
+          </li>
+          <li class="service" data-service>
+            <h3 class="service__heading">
+              <button class="service__toggle" type="button" aria-expanded="false" aria-controls="svc-5">
+                <span class="service__num" aria-hidden="true">05</span>
+                <span class="service__name">Software a medida</span>
+                <span class="service__icon" aria-hidden="true"></span>
+              </button>
+            </h3>
+            <div class="service__desc" id="svc-5"><div><p>Un sistema hecho para tu forma de trabajar, en vez de adaptarte a uno genérico.</p></div></div>
+          </li>
+          <li class="service" data-service>
+            <h3 class="service__heading">
+              <button class="service__toggle" type="button" aria-expanded="false" aria-controls="svc-6">
+                <span class="service__num" aria-hidden="true">06</span>
+                <span class="service__name">Automatizaciones</span>
+                <span class="service__icon" aria-hidden="true"></span>
+              </button>
+            </h3>
+            <div class="service__desc" id="svc-6"><div><p>Mensajes, planillas, avisos y reportes que se hacen solos, así ganás horas cada semana.</p></div></div>
+          </li>
+        </ol>
+
+        <p class="services__outro lead">Tu proyecto, de punta a punta, en un solo lugar.</p>
+      </div>
+    </section>
+
+    <!-- ============ PROCESO (sección invertida) ============ -->
+    <section class="section section--invert process" id="proceso" aria-labelledby="proceso-title">
+      <div class="container">
+        <h2 class="h2" id="proceso-title">Cómo trabajamos</h2>
+        <p class="lead process__intro">Cuatro pasos claros, para que sepas siempre en qué punto está tu proyecto.</p>
+
+        <ol class="steps" role="list">
+          <li class="step">
+            <span class="step__num" aria-hidden="true">1</span>
+            <h3 class="step__title"><span class="visually-hidden">Paso 1: </span>Nos contás la idea</h3>
+            <p class="step__text">Charlamos por videollamada o por email. Nos contás qué necesitás, sin tecnicismos.</p>
+          </li>
+          <li class="step">
+            <span class="step__num" aria-hidden="true">2</span>
+            <h3 class="step__title"><span class="visually-hidden">Paso 2: </span>Propuesta a medida sin costo</h3>
+            <p class="step__text">Te mandamos qué vamos a hacer, en cuánto tiempo y cuánto cuesta. Decidís sin compromiso.</p>
+          </li>
+          <li class="step">
+            <span class="step__num" aria-hidden="true">3</span>
+            <h3 class="step__title"><span class="visually-hidden">Paso 3: </span>Desarrollo con avances que podés ver</h3>
+            <p class="step__text">Trabajamos por etapas y te pasamos un link para que pruebes cada avance y opines.</p>
+          </li>
+          <li class="step">
+            <span class="step__num" aria-hidden="true">4</span>
+            <h3 class="step__title"><span class="visually-hidden">Paso 4: </span>Lanzamiento y soporte</h3>
+            <p class="step__text">Lo publicamos, te mostramos cómo usarlo y seguimos disponibles para ajustes y dudas.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============ LO QUE TU MARCA NECESITA ============ -->
+    <section class="section needs" id="tu-marca" aria-labelledby="tu-marca-title">
+      <div class="container">
+        <h2 class="h2" id="tu-marca-title">Lo que tu marca necesita en internet</h2>
+        <p class="lead needs__intro">No hace falta todo de entrada. Estas son las bases, y te ayudamos a ver por cuál conviene empezar.</p>
+
+        <ul class="needs__grid" role="list">
+          <li class="need">
+            <h3 class="need__title">Una web que se entienda en segundos</h3>
+            <p class="need__text">Qué hacés, para quién y cómo contactarte, sin que nadie tenga que buscarlo.</p>
+          </li>
+          <li class="need">
+            <h3 class="need__title">Aparecer en Google</h3>
+            <p class="need__text">Que te encuentren cuando buscan lo que ofrecés, en tu zona o en todo el país.</p>
+          </li>
+          <li class="need">
+            <h3 class="need__title">Verse bien en el celular</h3>
+            <p class="need__text">Casi todos llegan desde el teléfono. Si ahí no se ve bien, se van.</p>
+          </li>
+          <li class="need">
+            <h3 class="need__title">Un contacto a un clic</h3>
+            <p class="need__text">Que escribirte sea más fácil que irse: formulario, email o chat siempre a mano.</p>
+          </li>
+          <li class="need">
+            <h3 class="need__title">Vender o reservar online</h3>
+            <p class="need__text">Catálogo, pagos o turnos que funcionan solos, también fuera de horario.</p>
+          </li>
+          <li class="need">
+            <h3 class="need__title">Respuestas que no se pierden</h3>
+            <p class="need__text">Avisos y seguimiento automáticos, para que ninguna consulta quede sin contestar.</p>
+          </li>
+        </ul>
+
+        <p class="needs__outro">¿A tu marca le falta alguna? <a class="link-arrow" href="#contacto">Contanos tu idea <span aria-hidden="true">→</span></a></p>
+      </div>
+    </section>
+
+    <!-- ============ CONTACTO ============ -->
+    <section class="section contact" id="contacto" aria-labelledby="contacto-title">
+      <div class="container contact__grid">
+        <div class="contact__intro">
+          <h2 class="h2 contact__title" id="contacto-title">¿Tenés un proyecto en mente?</h2>
+          <p class="lead">Contanos de qué se trata y armamos una propuesta a medida, sin costo.</p>
+
+          <div class="contact__alt">
+            <p class="contact__alt-title">¿Preferís otro canal?</p>
+            <!--
+              WhatsApp (desactivado por ahora). Para sumarlo, descomentá y reemplazá
+              [[NÚMERO]] por el número con código de país, sin + ni espacios:
+              <a class="btn btn--ghost" href="https://wa.me/[[NÚMERO]]?text=Hola%20VEZZA%2C%20vi%20el%20sitio%20y%20quiero%20contarles%20una%20idea." target="_blank" rel="noopener" data-whatsapp>Escribinos por WhatsApp</a>
+            -->
+            <a class="btn btn--ghost" href="https://www.instagram.com/vezza.dev/" target="_blank" rel="noopener">Escribinos por Instagram</a>
+          </div>
+        </div>
+
+        <!--
+          Envío a tu automatización (webhook de n8n, Make, etc.).
+          Reemplazá [[WEBHOOK_URL]] por la URL del webhook. Llega un POST
+          application/x-www-form-urlencoded con: nombre, email, tipo, mensaje,
+          origen y website (honeypot: si viene con texto, es spam y hay que descartarlo).
+          El webhook tiene que responder 2xx y permitir CORS desde https://vezzadev.com.
+        -->
+        <form class="form" action="[[WEBHOOK_URL]]" method="POST" novalidate data-form>
+          <input type="hidden" name="origen" value="vezzadev.com">
+
+          <!-- Honeypot anti-spam: invisible para personas; si se completa, el envío se descarta -->
+          <div class="form__hp" aria-hidden="true">
+            <label for="f-website">No completes este campo</label>
+            <input id="f-website" type="text" name="website" tabindex="-1" autocomplete="off">
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="f-nombre">Nombre</label>
+            <input class="field__input" id="f-nombre" name="nombre" type="text" autocomplete="name" required aria-describedby="f-nombre-error">
+            <p class="field__error" id="f-nombre-error" hidden></p>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="f-email">Email</label>
+            <input class="field__input" id="f-email" name="email" type="email" autocomplete="email" inputmode="email" required aria-describedby="f-email-error">
+            <p class="field__error" id="f-email-error" hidden></p>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="f-tipo">Tipo de proyecto</label>
+            <div class="field__select">
+              <select class="field__input" id="f-tipo" name="tipo" required aria-describedby="f-tipo-error">
+                <option value="" selected disabled>Elegí una opción</option>
+                <option>Landing page</option>
+                <option>Sitio web completo</option>
+                <option>E-commerce</option>
+                <option>App web o móvil</option>
+                <option>Software a medida</option>
+                <option>Automatización</option>
+                <option>Todavía no lo sé</option>
+              </select>
+            </div>
+            <p class="field__error" id="f-tipo-error" hidden></p>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="f-mensaje">Mensaje</label>
+            <textarea class="field__input" id="f-mensaje" name="mensaje" rows="5" required aria-describedby="f-mensaje-hint f-mensaje-error"></textarea>
+            <p class="field__hint" id="f-mensaje-hint">Qué querés hacer y, si lo tenés, para cuándo lo necesitás.</p>
+            <p class="field__error" id="f-mensaje-error" hidden></p>
+          </div>
+
+          <button class="btn btn--primary btn--lg form__submit" type="submit" data-submit>
+            <span data-submit-label>Contanos tu idea</span>
+          </button>
+
+          <p class="form__status" role="status" aria-live="polite" data-status></p>
+        </form>
+
+        <!-- Se muestra en lugar del formulario cuando el envío sale bien -->
+        <div class="form-success" tabindex="-1" hidden data-success>
+          <p class="form-success__title">¡Listo, nos llegó tu idea!</p>
+          <p class="lead">Te escribimos a <strong data-success-email>tu email</strong> para charlarla, y después te mandamos la propuesta sin costo.</p>
+          <button class="link-arrow" type="button" data-reset>Enviar otra idea <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <a class="brand" href="#inicio" aria-label="VEZZA, volver al inicio">
+        <svg class="logo" viewBox="0 0 1024 264" width="109" height="28" aria-hidden="true" focusable="false">
+          <g fill="none" stroke-width="21">
+            <polyline class="logo__chev" points="97,12 23,132 97,252"/>
+            <polyline class="logo__chev" points="223,12 297,132 223,252"/>
+            <line class="logo__slash-static" x1="159.5" y1="72" x2="159.5" y2="193.5" stroke-width="17" transform="rotate(21.8 159.5 132.75)"/>
+          </g>
+          <g transform="translate(412 66) scale(1.4667)">
+            <polygon class="logo__ink" points="0,0 24,0 43,72 48,72 65,0 88,0 64,90 26,90"/>
+            <polygon class="logo__ink" points="99,0 156,0 156,18 121,18 121,35 154,35 154,53 121,53 121,72 157,72 157,90 99,90"/>
+            <polygon class="logo__acc" points="167,0 238,0 238,16 194,72 238,72 238,90 165,90 165,74 208,18 167,18"/>
+            <polygon class="logo__acc" points="246,0 317,0 317,16 273,72 317,72 317,90 244,90 244,74 287,18 246,18"/>
+            <path class="logo__ink" fill-rule="evenodd" d="M320 90 349 0h37l31 90h-25l-6-20h-37l-6 20Zm35-39h25l-10-33h-5Z"/>
+          </g>
+        </svg>
+      </a>
+
+      <nav aria-label="Pie de página">
+        <ul class="site-footer__links" role="list">
+          <li><a href="#servicios">Servicios</a></li>
+          <li><a href="#proceso">Proceso</a></li>
+          <li><a href="#tu-marca">Tu marca</a></li>
+          <li><a href="#contacto">Contacto</a></li>
+          <li><a href="https://www.instagram.com/vezza.dev/" target="_blank" rel="noopener">Instagram</a></li>
+        </ul>
+      </nav>
+
+      <p class="site-footer__copy">© 2026 VEZZA · Argentina</p>
+    </div>
+  </footer>
+</body>
+</html>
