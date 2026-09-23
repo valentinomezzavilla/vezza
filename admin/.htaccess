@@ -1,0 +1,2 @@
+# /admin (sin barra) lo resuelve el .htaccess raíz; sin esto mod_dir redirige a /admin/ antes.
+DirectorySlash Off

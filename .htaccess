@@ -87,3 +87,25 @@ DirectoryIndex index.html
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
   Header always set Strict-Transport-Security "max-age=31536000"
 </IfModule>
+
+# ==========================================================================
+# Panel admin (/admin, /api). Agregado al final: no modifica nada de arriba.
+# ==========================================================================
+<IfModule mod_alias.c>
+  RedirectMatch 404 (?i)^/(admin/includes|db|scripts|tests|vendor|docs)(/|$)
+  RedirectMatch 404 (?i)^/(\.env|composer\.(json|lock)$|phpunit\.xml)
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^admin-login$ admin/login.php [L,QSA]
+  RewriteRule ^admin-logout$ admin/logout.php [L,QSA]
+  RewriteRule ^admin/?$ admin/index.php [L,QSA]
+  RewriteRule ^admin/clientes/([0-9]+)$ admin/cliente.php?id=$1 [L,QSA]
+  RewriteRule ^admin/procesos/([0-9]+)$ admin/proceso.php?id=$1 [L,QSA]
+  RewriteRule ^admin/(clientes|procesos|cobros|gastos|tareas|fixs|agenda|reportes|migraciones)$ admin/$1.php [L,QSA]
+  RewriteRule ^api/suscripciones/([0-9]+)/pagar$ api/suscripciones.php?id=$1&accion=pagar [L,QSA]
+  RewriteRule ^api/reportes/balance$ api/reportes.php [L,QSA]
+  RewriteRule ^api/([a-z-]+)/([0-9]+)$ api/$1.php?id=$2 [L,QSA]
+  RewriteRule ^api/([a-z-]+)$ api/$1.php [L,QSA]
+</IfModule>
