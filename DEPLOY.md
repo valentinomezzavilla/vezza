@@ -124,9 +124,10 @@ sigue funcionando igual.
    `APP_ENV=production` es obligatorio: activa la cookie `Secure`. En
    `ADMIN_PASSWORD_HASH` pegá el hash que generaste. No agregues comentarios
    con `#` al final de una línea: pasarían a formar parte del valor.
-6. **Carpeta de comprobantes:** en ese mismo nivel creá
-   `vezza_uploads/comprobantes/`. El panel la crea solo si tiene permisos, pero
-   conviene dejarla hecha.
+6. **Carpetas privadas:** en ese mismo nivel creá `vezza_uploads/comprobantes/`
+   (comprobantes) y `vezza_sessions/` (sesiones del panel, para que no te
+   desloguee la limpieza del hosting). El panel las crea solo si tiene
+   permisos, pero conviene dejarlas hechas.
 
 ### Deploys siguientes
 

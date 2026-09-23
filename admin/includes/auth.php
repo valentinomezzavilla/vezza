@@ -5,6 +5,16 @@ const LOGIN_MAX_INTENTOS = 5;
 const LOGIN_VENTANA_MIN = 15;
 const SESION_DURACION = 604800; // 7 días
 
+/** Carpeta propia de sesiones, fuera de public_html: la limpieza respeta los 7 días de este panel. */
+function sessions_dir(bool $crear = true): string
+{
+    $dir = env('SESSIONS_DIR') ?? dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'vezza_sessions';
+    if ($crear && !is_dir($dir)) {
+        @mkdir($dir, 0700, true);
+    }
+    return $dir;
+}
+
 function session_boot(): void
 {
     if (PHP_SAPI === 'cli') {
@@ -14,9 +24,11 @@ function session_boot(): void
     if (session_status() === PHP_SESSION_ACTIVE) {
         return;
     }
-    $dir = env('SESSIONS_DIR');
-    if ($dir !== null) {
+    $dir = sessions_dir();
+    if (is_dir($dir) && is_writable($dir)) {
         session_save_path($dir);
+    } else {
+        error_log("[panel] No se pudo usar la carpeta de sesiones $dir; se usa la del hosting");
     }
     ini_set('session.gc_maxlifetime', (string)SESION_DURACION);
     ini_set('session.use_strict_mode', '1');
