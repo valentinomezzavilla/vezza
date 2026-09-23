@@ -138,6 +138,11 @@ sigue funcionando igual.
 
 ### Qué nunca se sube
 
+`composer.json` existe solo para correr los tests en tu compu. Si el deploy
+por Git de Hostinger ejecuta `composer install` por su cuenta, funciona con
+PHP 8.1 o superior y lo que instala en `vendor/` queda bloqueado al público.
+Después del primer deploy revisá que la landing se haya actualizado.
+
 `.env`, `.env.testing` y `vendor/` están en `.gitignore`. `.htaccess` además
 responde 404 en `/.env*`, `/db/`, `/scripts/`, `/tests/`, `/vendor/` y
 `/admin/includes/`, y 403 en `/docs/` y en los `.md`.
