@@ -11,6 +11,10 @@ foreach (glob(__DIR__ . '/repos/*.php') ?: [] as $archivo) {
 }
 
 configurar_errores(PHP_SAPI);
+if (PHP_SAPI !== 'cli') {
+    // Antes que nada: si algo falla después, el error tampoco puede quedar en la caché del CDN.
+    send_panel_headers();
+}
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 if (!env_loaded()) {
