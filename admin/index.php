@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 require __DIR__ . '/includes/bootstrap.php';
 require_admin();
-layout_start('Inicio', 'inicio');
+layout_start('Inicio', 'inicio', ['dashboard.js']);
 ?>
-<p class="aviso">El panel está funcionando. El resumen del negocio llega en la Task 20.</p>
+<div id="dashboard" aria-live="polite"><p class="item-sub">Cargando…</p></div>
 <?php
 layout_end();
