@@ -73,6 +73,26 @@ const Panel = (() => {
     nodo.replaceChildren(...hijos.flat(Infinity).filter((h) => h !== null && h !== undefined && h !== false));
   }
 
+  // Trazos de íconos Lucide (ISC). Solo constantes: nunca se inserta markup armado con datos.
+  const ICONOS = {
+    cerrar: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    subir: '<path d="m18 15-6-6-6 6"/>',
+    bajar: '<path d="m6 9 6 6 6-6"/>',
+    arrastrar: '<circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>',
+  };
+  function icono(nombre) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    for (const [k, v] of Object.entries({
+      class: 'icono', width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+      'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false',
+    })) svg.setAttribute(k, String(v));
+    svg.innerHTML = ICONOS[nombre] || '';
+    return svg;
+  }
+
+  const movimientoReducido = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const animacion = () => (movimientoReducido() ? 0 : 150);
+
   function toast(mensaje, tipo = 'ok') {
     const cont = document.getElementById('toasts');
     if (!cont) return;
@@ -88,7 +108,7 @@ const Panel = (() => {
   }
 
   function dialogo(titulo, contenido, pie) {
-    const cerrar = el('button', { type: 'button', class: 'btn-cerrar', 'aria-label': 'Cerrar', text: '×' });
+    const cerrar = el('button', { type: 'button', class: 'btn-cerrar', 'aria-label': 'Cerrar' }, icono('cerrar'));
     const form = el('form', { novalidate: true },
       el('div', { class: 'modal-head' }, el('h2', { text: titulo }), cerrar),
       el('div', { class: 'modal-body' }, contenido),
@@ -147,9 +167,11 @@ const Panel = (() => {
       }
       control = el('input', attrs);
     }
-    const error = el('div', { class: 'campo-error' });
+    const error = el('div', { class: 'campo-error', id: `${id}-error` });
     const label = el('label', { for: id, text: def.label + (def.required ? ' *' : '') });
-    const ayuda = def.ayuda ? el('small', { class: 'item-sub', text: def.ayuda }) : null;
+    const ayuda = def.ayuda ? el('small', { class: 'item-sub', id: `${id}-ayuda`, text: def.ayuda }) : null;
+    control.setAttribute('aria-describedby', [ayuda ? `${id}-ayuda` : null, `${id}-error`].filter(Boolean).join(' '));
+    if (def.required) control.setAttribute('aria-required', 'true');
     const fila = tipo === 'checkbox'
       ? el('div', { class: 'campo' }, el('div', { class: 'campo-check' }, control, label), ayuda, error)
       : el('div', { class: 'campo' }, label, control, datalist, ayuda, error);
@@ -217,8 +239,9 @@ const Panel = (() => {
       d.addEventListener('close', () => resolver(resultado));
 
       function mostrarError(err) {
-        for (const { fila } of Object.values(controles)) {
+        for (const { fila, control } of Object.values(controles)) {
           fila.classList.remove('invalido');
+          control.removeAttribute('aria-invalid');
           fila.querySelector('.campo-error').textContent = '';
         }
         if (err?.status === 401) return;
@@ -229,6 +252,7 @@ const Panel = (() => {
           const c = controles[nombre];
           if (!c) continue;
           c.fila.classList.add('invalido');
+          c.control.setAttribute('aria-invalid', 'true');
           c.fila.querySelector('.campo-error').textContent = msg;
           primero ??= c.control;
         }
@@ -238,6 +262,8 @@ const Panel = (() => {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         guardar.disabled = true;
+        guardar.setAttribute('aria-busy', 'true');
+        guardar.textContent = 'Guardando…';
         errorGeneral.hidden = true;
         try {
           resultado = await enviar(leerValores(controles));
@@ -246,6 +272,8 @@ const Panel = (() => {
           mostrarError(err);
         } finally {
           guardar.disabled = false;
+          guardar.removeAttribute('aria-busy');
+          guardar.textContent = textoBoton;
         }
       });
       form.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])')?.focus();
@@ -313,12 +341,31 @@ const Panel = (() => {
   const acciones = (...botones) => llenar(document.getElementById('page-actions'), botones);
 
   function tabs(contenedor, lista) {
-    const panel = el('div', { role: 'tabpanel' });
-    const botones = lista.map((t) => el('button', { type: 'button', role: 'tab', 'aria-selected': 'false', text: t.label, onclick: () => activar(t.id) }));
-    llenar(contenedor, el('div', { class: 'tabs', role: 'tablist' }, botones), panel);
+    const panel = el('div', { role: 'tabpanel', id: 'panel-pestanas', tabindex: '0' });
+    const botones = lista.map((t) => el('button', {
+      type: 'button', role: 'tab', id: `pestana-${t.id}`, 'aria-selected': 'false', 'aria-controls': 'panel-pestanas',
+      tabindex: '-1', text: t.label, onclick: () => activar(t.id),
+    }));
+    const barra = el('div', { class: 'tabs', role: 'tablist' }, botones);
+    // Flechas izquierda/derecha, Inicio y Fin recorren las pestañas (patrón WAI-ARIA).
+    barra.addEventListener('keydown', (e) => {
+      const i = botones.indexOf(document.activeElement);
+      if (i < 0) return;
+      const destino = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: botones.length - 1 }[e.key];
+      if (destino === undefined) return;
+      e.preventDefault();
+      const j = (destino + botones.length) % botones.length;
+      activar(lista[j].id);
+      botones[j].focus();
+    });
+    llenar(contenedor, barra, panel);
     function activar(id) {
       const t = lista.find((x) => x.id === id) || lista[0];
-      lista.forEach((x, i) => botones[i].setAttribute('aria-selected', String(x.id === t.id)));
+      lista.forEach((x, i) => {
+        botones[i].setAttribute('aria-selected', String(x.id === t.id));
+        botones[i].tabIndex = x.id === t.id ? 0 : -1;
+      });
+      panel.setAttribute('aria-labelledby', `pestana-${t.id}`);
       history.replaceState(null, '', `${location.pathname}${location.search}#${t.id}`);
       llenar(panel, el('p', { class: 'item-sub', text: 'Cargando…' }));
       Promise.resolve().then(() => t.render(panel)).catch(manejarError);
@@ -333,7 +380,7 @@ const Panel = (() => {
   });
 
   return {
-    ApiError, api, get, post, put, del, qs, el, llenar, toast, manejarError, confirmar, modalForm,
+    ApiError, api, get, post, put, del, qs, el, llenar, icono, animacion, toast, manejarError, confirmar, modalForm,
     aFecha, iso, hoy, diasHasta, fmtMonto, fmtFecha, fmtHora, fmtFechaHora,
     ETQ, opciones, badge, badgeEstado, vacio, clientes, opcionesClientes, boton, acciones, tabs,
   };

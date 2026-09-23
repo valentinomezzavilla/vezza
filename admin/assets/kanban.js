@@ -8,11 +8,11 @@ function kanbanBoard(contenedor, { columnas, items, tarjeta, alMover }) {
     const lista = el('ul', { class: 'kanban-lista', dataset: { estado } },
       suyos.map((i) => el('li', { class: 'kanban-card', dataset: { id: String(i.id) } }, tarjeta(i))));
     tablero.append(el('section', { class: 'kanban-col', 'aria-label': titulo },
-      el('h3', {}, el('span', { text: titulo }), Panel.badge(String(suyos.length))),
+      el('h2', {}, el('span', { text: titulo }), Panel.badge(String(suyos.length))),
       lista));
     Sortable.create(lista, {
       group: 'kanban',
-      animation: 150,
+      animation: Panel.animacion(),
       delay: 180,
       delayOnTouchOnly: true,
       filter: 'select, a, button, input',

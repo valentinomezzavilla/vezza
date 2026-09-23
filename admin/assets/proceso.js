@@ -30,7 +30,18 @@
         dato('Entrega estimada', p.fecha_entrega_estimada && Panel.fmtFecha(p.fecha_entrega_estimada, true))));
   }
 
-  function itemSubtarea(s) {
+  async function mover(s, antesDe) {
+    try {
+      await Panel.put(`/api/subtareas/${s.id}`, { antes_de: antesDe });
+      await cargarSubtareas();
+      // El foco vuelve a la subtarea movida para poder seguir moviéndola con el teclado.
+      checklist.querySelector(`[data-id="${s.id}"] .texto`)?.focus();
+    } catch (err) {
+      Panel.manejarError(err);
+    }
+  }
+
+  function itemSubtarea(s, i, todas) {
     const check = el('input', { type: 'checkbox', checked: Boolean(s.completada), 'aria-label': `Completar "${s.titulo}"` });
     check.addEventListener('change', async () => {
       try {
@@ -42,11 +53,20 @@
         Panel.manejarError(err);
       }
     });
+    // Alternativa al arrastre (WCAG 2.2): subir va antes de la anterior; bajar, antes de la que sigue a la siguiente.
+    const subir = el('button', {
+      type: 'button', class: 'btn btn-chico btn-icono', 'aria-label': `Subir "${s.titulo}"`, disabled: i === 0,
+      onclick: () => mover(s, todas[i - 1].id),
+    }, Panel.icono('subir'));
+    const bajar = el('button', {
+      type: 'button', class: 'btn btn-chico btn-icono', 'aria-label': `Bajar "${s.titulo}"`, disabled: i === todas.length - 1,
+      onclick: () => mover(s, todas[i + 2] ? todas[i + 2].id : null),
+    }, Panel.icono('bajar'));
     return el('li', { class: `check-item${s.completada ? ' hecha' : ''}`, dataset: { id: String(s.id) } },
-      el('span', { class: 'asa', 'aria-hidden': 'true', text: '⋮⋮' }),
+      el('span', { class: 'asa' }, Panel.icono('arrastrar')),
       check,
-      el('span', { class: 'texto item-titulo', text: s.titulo }),
-      Panel.boton('Editar', () => editarSubtarea(s), 'chico'));
+      el('button', { type: 'button', class: 'texto boton-texto item-titulo', text: s.titulo, 'aria-label': `Editar "${s.titulo}"`, onclick: () => editarSubtarea(s) }),
+      el('span', { class: 'mover' }, subir, bajar));
   }
 
   function formNueva() {
@@ -92,7 +112,7 @@
       subtareas.length ? ul : Panel.vacio('Sumá la primera subtarea para armar el checklist.'));
     Sortable.create(ul, {
       handle: '.asa',
-      animation: 150,
+      animation: Panel.animacion(),
       onEnd: async (evt) => {
         if (evt.oldIndex === evt.newIndex) return;
         const siguiente = evt.item.nextElementSibling;

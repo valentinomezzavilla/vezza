@@ -38,6 +38,7 @@ send_panel_headers();
 header('Content-Type: text/html; charset=utf-8');
 layout_head('Ingresar');
 ?>
+<script src="/admin/assets/login.js?v=<?= PANEL_ASSET_V ?>" defer></script>
 </head>
 <body class="login-body">
 <main class="login card">
@@ -55,7 +56,10 @@ layout_head('Ingresar');
     </div>
     <div class="campo">
       <label for="clave">Contraseña</label>
-      <input id="clave" name="clave" type="password" autocomplete="current-password" required>
+      <div class="fila-clave">
+        <input id="clave" name="clave" type="password" autocomplete="current-password" required>
+        <button type="button" class="btn" id="ver-clave" aria-controls="clave" aria-pressed="false">Mostrar</button>
+      </div>
     </div>
     <button class="btn btn-primario" type="submit">Ingresar</button>
   </form>

@@ -24,14 +24,18 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* Con la barra inferior fija, el elemento con foco nunca queda tapado. */
+html { -webkit-text-size-adjust: 100%; scroll-padding-bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom)); }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.5 var(--font);
+  font: 16px/1.5 var(--font);
   padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
 }
+a, button, summary, select, input, label, textarea { touch-action: manipulation; }
+.icono { flex: 0 0 auto; }
+.main:focus:not(:focus-visible) { outline: none; }
 h1, h2, h3 { font-family: var(--font-title); line-height: 1.25; margin: 0; }
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; }
@@ -59,9 +63,9 @@ p { margin: 0 0 8px; }
   display: grid; grid-template-columns: repeat(5, 1fr);
 }
 .bottom-nav > a, .bottom-nav summary {
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   height: var(--nav-h); color: var(--muted); text-decoration: none;
-  font-size: .8rem; font-weight: 700; cursor: pointer; list-style: none;
+  font-size: .75rem; font-weight: 700; cursor: pointer; list-style: none;
 }
 .bottom-nav summary::-webkit-details-marker { display: none; }
 .bottom-nav > a[aria-current="page"], .bottom-nav .activo > summary { color: var(--accent); }
@@ -72,10 +76,14 @@ p { margin: 0 0 8px; }
   box-shadow: 0 8px 24px rgba(21, 19, 28, .15); padding: 6px; display: grid;
 }
 .nav-mas-menu a, .nav-mas-menu button, .sidebar a, .sidebar button {
-  display: block; width: 100%; min-height: 44px; padding: 11px 14px; border: 0; border-radius: 8px;
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 10px 14px; border: 0; border-radius: 8px;
   background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left;
   text-decoration: none; cursor: pointer;
 }
+.nav-mas-menu .icono, .sidebar .icono { width: 20px; height: 20px; color: var(--muted); }
+.nav-mas-menu [aria-current="page"] .icono, .sidebar [aria-current="page"] .icono { color: inherit; }
+/* "Salir" separado del resto de la navegación. */
+.form-salir { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
 .nav-mas-menu a:hover, .nav-mas-menu button:hover, .sidebar a:hover, .sidebar button:hover { background: var(--bg); }
 .nav-mas-menu a[aria-current="page"], .sidebar a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
 .nav-mas-menu form, .sidebar form { margin: 0; }
@@ -107,6 +115,20 @@ p { margin: 0 0 8px; }
 .btn-peligro { color: var(--danger); }
 .btn-chico { min-height: 36px; padding: 0 12px; font-size: .875rem; }
 .btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.btn[aria-busy="true"] { cursor: progress; }
+.btn-icono { min-width: 36px; padding: 0; }
+.btn-icono .icono { width: 18px; height: 18px; }
+.btn:disabled .icono { opacity: .5; }
+/* Respuesta visual al tocar, sin mover el layout. */
+.btn:active:not(:disabled), a.item:active, button.item:active, a.stat:active, .boton-texto:active { transform: scale(.98); }
+@media (prefers-reduced-motion: no-preference) {
+  .btn, a.item, button.item, a.stat { transition: transform .12s ease-out, border-color .12s ease-out, background-color .12s ease-out; }
+}
+/* En pantallas táctiles, todo control llega a 44px. */
+@media (pointer: coarse) {
+  .btn-chico, .btn-icono, .item-acciones .filtro, .kanban-card .filtro { min-height: 44px; }
+  .btn-icono { min-width: 44px; }
+}
 .boton-texto { display: grid; gap: 4px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 
 /* ---------- Formularios ---------- */
@@ -138,8 +160,10 @@ p { margin: 0 0 8px; }
   color: inherit; font: inherit; text-decoration: none;
 }
 a.item:hover, button.item:hover, .item.clickeable:hover { border-color: var(--accent); cursor: pointer; }
+.item, .card, .kanban-card, .check-item { overflow-wrap: anywhere; }
 .item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.item-titulo { font-weight: 700; text-decoration: none; color: inherit; }
+.item-top > * { min-width: 0; }
+.item-titulo { font-weight: 700; text-decoration: none; color: inherit; font-variant-numeric: tabular-nums; }
 a.item-titulo:hover { color: var(--accent); }
 .item-sub { color: var(--muted); font-size: .875rem; }
 .item-acciones { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
@@ -159,7 +183,7 @@ a.item-titulo:hover { color: var(--accent); }
 .stat { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; color: inherit; text-decoration: none; }
 a.stat:hover { border-color: var(--accent); }
 .stat-label { color: var(--muted); font-size: .8125rem; font-weight: 700; }
-.stat-valor { font-family: var(--font-title); font-size: 1.3rem; font-weight: 700; }
+.stat-valor { font-family: var(--font-title); font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .seccion { margin-top: 24px; }
 .seccion > h2, .seccion > .item-top { margin-bottom: 10px; }
 
@@ -171,7 +195,7 @@ a.stat:hover { border-color: var(--accent); }
 /* ---------- Kanban ---------- */
 .kanban { display: grid; grid-auto-flow: column; grid-auto-columns: 85%; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; }
 .kanban-col { scroll-snap-align: start; display: flex; flex-direction: column; min-height: 220px; background: var(--surface-2); border-radius: var(--radius); padding: 10px; }
-.kanban-col h3 { display: flex; justify-content: space-between; align-items: center; padding: 4px 4px 10px; font-size: .9rem; }
+.kanban-col h2 { display: flex; justify-content: space-between; align-items: center; padding: 4px 4px 10px; font-size: .9rem; }
 .kanban-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; align-content: start; flex: 1; min-height: 60px; }
 .kanban-card { display: grid; gap: 6px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); cursor: grab; }
 .kanban-card .filtro { min-height: 36px; padding: 4px 8px; font-size: 14px; }
@@ -184,6 +208,7 @@ a.stat:hover { border-color: var(--accent); }
 .check-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .check-item input[type="checkbox"] { width: 22px; height: 22px; flex: 0 0 auto; }
 .check-item .texto { flex: 1; min-width: 0; }
+.check-item .mover { display: flex; gap: 4px; }
 .check-item.hecha .item-titulo { text-decoration: line-through; color: var(--muted); }
 .asa { cursor: grab; color: var(--muted); padding: 4px 6px; user-select: none; }
 .progreso { height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; margin: 8px 0 12px; }
@@ -198,9 +223,12 @@ dialog.modal form { display: flex; flex-direction: column; max-height: inherit; 
 .modal-pie { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding: 12px 20px 20px; border-top: 1px solid var(--line); }
 .modal-pie .separador { flex: 1; }
 .btn-cerrar { min-width: 44px; min-height: 44px; border: 0; background: none; color: var(--muted); font-size: 1.6rem; line-height: 1; cursor: pointer; }
+.btn-cerrar .icono { width: 22px; height: 22px; }
 @media (max-width: 639px) {
   dialog.modal { width: 100%; max-width: 100%; height: 100%; max-height: 100%; margin: 0; border-radius: 0; }
   dialog.modal form { height: 100%; }
+  .modal-head { padding-top: calc(12px + env(safe-area-inset-top)); }
+  .modal-pie { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
 }
 
 /* ---------- Toasts ---------- */
@@ -263,8 +291,16 @@ dialog.modal form { display: flex; flex-direction: column; max-height: inherit; 
 }
 
 /* ---------- Login ---------- */
-.login-body { padding: 0; min-height: 100vh; display: grid; place-items: center; }
+.login-body { padding: 0; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; }
 .login { width: min(400px, calc(100% - 32px)); }
 .login h1 { margin-bottom: 4px; }
 .login p { color: var(--muted); margin-bottom: 20px; }
-.login .btn { width: 100%; }
+.login .btn-primario { width: 100%; }
+.fila-clave { display: flex; gap: 8px; }
+.fila-clave input { flex: 1; min-width: 0; }
+
+/* ---------- Movimiento reducido ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+  .btn:active, a.item:active, button.item:active, a.stat:active, .boton-texto:active { transform: none; }
+}

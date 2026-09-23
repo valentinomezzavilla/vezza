@@ -28,6 +28,7 @@
   function textoItem(i) {
     let t = PREFIJO[i.tipo] + i.titulo;
     if (i.monto) t += ` · ${Panel.fmtMonto(i.monto, i.moneda)}`;
+    if (i.vencido) t += ' (vencido)';
     if (i.tipo === 'entrega' && i.cliente_nombre) t += ` (${i.cliente_nombre})`;
     return t;
   }
