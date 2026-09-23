@@ -86,3 +86,91 @@ bloquea su acceso.
   `og-image-2.png`) y actualizá la referencia, por el mismo motivo.
 - Si cambia el dominio, buscá y reemplazá `https://vezzadev.com` en
   `index.html`, `sitemap.xml` y `robots.txt`.
+
+## Panel admin (`/admin`)
+
+El panel vive en el mismo repo y el mismo `public_html` que la landing. Es PHP
+plano más MySQL: Hostinger lo ejecuta solo y el `git push` sigue siendo el único
+paso de deploy. La landing no depende del panel. Si el panel falla, la landing
+sigue funcionando igual.
+
+### Setup único en Hostinger (antes del primer push con el panel)
+
+1. **PHP:** en hPanel → Avanzado → Configuración de PHP, confirmá que la
+   versión sea 8.1 o superior y que la extensión `fileinfo` esté activa.
+2. **Base de datos:** en hPanel → Bases de datos → MySQL, creá una base y un
+   usuario con una contraseña larga. Anotá el host (suele ser `localhost`), el
+   nombre, el usuario y la contraseña.
+3. **Esquema:** abrí phpMyAdmin en esa base → Importar → subí
+   `db/migrations/001_inicial.sql` desde tu compu.
+4. **Hash de tu contraseña:** en tu compu, desde PowerShell, corré
+   `php scripts/hash-password.php` y copiá la línea `ADMIN_PASSWORD_HASH=...`.
+5. **`.env` fuera de `public_html`:** en el Administrador de archivos subí un
+   nivel desde `public_html` (a la carpeta que la contiene) y creá un archivo
+   `.env`:
+
+   ```dotenv
+   APP_ENV=production
+   ADMIN_USERNAME=tu-usuario
+   ADMIN_PASSWORD_HASH=$2y$12$...
+   DB_HOST=localhost
+   DB_NAME=u123456_vezza
+   DB_USER=u123456_vezza
+   DB_PASS=la-contraseña-de-la-base
+   UPLOADS_DIR=
+   SESSIONS_DIR=
+   ```
+
+   `APP_ENV=production` es obligatorio: activa la cookie `Secure`. En
+   `ADMIN_PASSWORD_HASH` pegá el hash que generaste. No agregues comentarios
+   con `#` al final de una línea: pasarían a formar parte del valor.
+6. **Carpeta de comprobantes:** en ese mismo nivel creá
+   `vezza_uploads/comprobantes/`. El panel la crea solo si tiene permisos, pero
+   conviene dejarla hecha.
+
+### Deploys siguientes
+
+- `git push` a `main`, igual que siempre.
+- Si el push trae un archivo nuevo en `db/migrations/`, entrá a
+  `https://vezzadev.com/admin/migraciones` y tocá **Aplicar migraciones**.
+- Si cambiaste `admin/assets/*.css` o `*.js`, subí `PANEL_ASSET_V` en
+  `admin/includes/layout.php` antes de hacer push.
+
+### Qué nunca se sube
+
+`.env`, `.env.testing` y `vendor/` están en `.gitignore`. `.htaccess` además
+responde 404 en `/.env*`, `/db/`, `/scripts/`, `/tests/`, `/vendor/` y
+`/admin/includes/`, y 403 en `/docs/` y en los `.md`.
+
+### Verificación después de cada deploy
+
+```bash
+scripts/verificar-panel.sh https://vezzadev.com
+scripts/verificar-landing.sh https://vezzadev.com despues.txt
+diff antes.txt despues.txt   # no tiene que haber diferencias
+```
+
+### Si algo sale mal
+
+- **Panel con error 500:** revisá que `.env` exista un nivel arriba de
+  `public_html` y que los datos de la base sean correctos. El detalle queda en
+  el log de errores de PHP (hPanel → Avanzado → Logs de errores).
+- **Te olvidaste la contraseña:** generá un hash nuevo con
+  `php scripts/hash-password.php` y reemplazá `ADMIN_PASSWORD_HASH` en `.env`.
+- **Te bloqueaste por intentos:** esperá 15 minutos o, en phpMyAdmin, corré
+  `DELETE FROM login_intentos;`.
+- **Volver atrás:** hacé `git revert` del commit que rompió algo y después
+  `git push`. La landing no se ve afectada.
+
+### Correr el panel en tu compu
+
+1. XAMPP (PHP 8.2) está instalado en `C:\xampp` con un virtual host en el
+   puerto 8080 que apunta a esta carpeta. Arrancá Apache y MySQL desde el
+   XAMPP Control Panel.
+2. `.env` local ya existe (base `vezza_admin`). Para usar tu propia
+   contraseña, generá el hash con `php scripts/hash-password.php` y
+   reemplazalo en `.env`.
+3. Si hay migraciones nuevas: `php db/migrate.php`. Después abrí
+   http://localhost:8080/admin.
+4. Tests: `php vendor/bin/phpunit`. Usan la base `vezza_admin_test`, definida
+   en `.env.testing`.
