@@ -10,6 +10,7 @@ foreach (glob(__DIR__ . '/repos/*.php') ?: [] as $archivo) {
     require_once $archivo;
 }
 
+configurar_errores(PHP_SAPI);
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 if (!env_loaded()) {

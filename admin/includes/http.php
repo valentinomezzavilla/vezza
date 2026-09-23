@@ -66,6 +66,27 @@ function route_id(): ?int
     return (int)$id;
 }
 
+/** En web nunca se muestran errores en pantalla: podrían exponer datos de la base. Quedan en el log. */
+function configurar_errores(string $sapi): void
+{
+    if ($sapi === 'cli') {
+        return;
+    }
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
+    set_exception_handler('responder_error_interno');
+}
+
+function responder_error_interno(Throwable $e): void
+{
+    error_log('[panel] ' . $e);
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: text/plain; charset=utf-8');
+    }
+    echo 'Algo salió mal en el panel. El detalle quedó en el log de errores de PHP.';
+}
+
 function e(mixed $texto): string
 {
     return htmlspecialchars((string)$texto, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
