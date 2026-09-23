@@ -8,6 +8,13 @@ header('X-Robots-Tag: noindex, nofollow');
 header('Cache-Control: no-store');
 ini_set('display_errors', '0');
 
+// Solo responde a quien conoce la clave (?k=...). Acá va únicamente su hash SHA-256.
+$clave = is_string($_GET['k'] ?? null) ? $_GET['k'] : '';
+if (!hash_equals('553585ed46f9ddc2babed0b0ce5d9421fa3c9bc079572eac3a5018b55517ecfb', hash('sha256', $clave))) {
+    http_response_code(404);
+    exit;
+}
+
 function linea(string $k, mixed $v): void
 {
     echo str_pad($k, 34) . (is_bool($v) ? ($v ? 'sí' : 'no') : (string)$v) . "\n";
