@@ -76,7 +76,13 @@ function validar_valor(mixed $v, array $r): mixed
             return $v;
 
         case 'decimal':
-            $s = is_string($v) ? str_replace(',', '.', $v) : $v;
+            $s = $v;
+            if (is_string($v)) {
+                // es-AR: "1.500" o "1.500,50" usan punto de miles; "1500.50" (lo que devuelve el servidor) no.
+                $s = preg_match('/^[1-9]\d{0,2}(\.\d{3})+(,\d+)?$/', $v)
+                    ? str_replace(['.', ','], ['', '.'], $v)
+                    : str_replace(',', '.', $v);
+            }
             if (!is_int($s) && !is_float($s) && !(is_string($s) && preg_match('/^\d+(\.\d+)?$/', $s))) {
                 throw new InvalidArgumentException(is_string($s) && str_starts_with($s, '-') ? 'No puede ser negativo' : 'Tiene que ser un número (ej. 1500,50)');
             }

@@ -41,7 +41,19 @@ final class ValidateTest extends DbTestCase
         $this->assertSame('0.10', validate(['monto' => '0.1'], $schema)['monto']);
         $this->assertArrayHasKey('monto', $this->errores422(fn() => validate(['monto' => '-1'], $schema)));
         $this->assertArrayHasKey('monto', $this->errores422(fn() => validate(['monto' => 'abc'], $schema)));
-        $this->assertArrayHasKey('monto', $this->errores422(fn() => validate(['monto' => '1.500,50'], $schema)));
+    }
+
+    public function test_decimal_con_punto_de_miles_no_se_divide_por_mil(): void
+    {
+        $schema = ['monto' => ['type' => 'decimal']];
+        $this->assertSame('1500.00', validate(['monto' => '1.500'], $schema)['monto']);
+        $this->assertSame('15000.00', validate(['monto' => '15.000'], $schema)['monto']);
+        $this->assertSame('1500000.00', validate(['monto' => '1.500.000'], $schema)['monto']);
+        $this->assertSame('1500.50', validate(['monto' => '1.500,50'], $schema)['monto']);
+        // Valores que ya vienen del servidor (formularios de edición) no cambian.
+        $this->assertSame('1500.50', validate(['monto' => '1500.50'], $schema)['monto']);
+        $this->assertSame('0.50', validate(['monto' => '0.500'], $schema)['monto']);
+        $this->assertArrayHasKey('monto', $this->errores422(fn() => validate(['monto' => '1.50.0'], $schema)));
     }
 
     public function test_fechas(): void
