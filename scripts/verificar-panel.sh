@@ -27,9 +27,11 @@ esperar 401 /api/reportes/balance
 for ruta in /.env /.env.example /.env.testing /composer.json /composer.lock /phpunit.xml \
             /db/migrations/001_inicial.sql /db/migrate.php /admin/includes/env.php \
             /admin/includes/repos/clientes.php /scripts/hash-password.php /tests/bootstrap.php \
-            /vendor/autoload.php /docs/superpowers/specs/2026-09-22-panel-admin-design.md; do
+            /vendor/autoload.php; do
   esperar 404 "$ruta"
 done
+# Los .md ya los bloqueaba la regla original de .htaccess (403), que corre antes que el 404 del panel.
+esperar 403 /docs/superpowers/specs/2026-09-22-panel-admin-design.md
 
 cabeceras=$(curl -sI "$base/admin-login" | tr -d '\r')
 for patron in '^x-robots-tag: noindex' '^cache-control: no-store' '^content-security-policy:'; do
