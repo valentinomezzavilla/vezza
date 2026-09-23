@@ -9,7 +9,9 @@ if ($id < 1 || !crud_exists('clientes', $id)) {
     pagina_no_encontrada('Ese cliente no existe.', '/admin/clientes', 'Volver a clientes', 'clientes');
 }
 
-layout_start('Cliente', 'clientes', ['mod-clientes.js', 'cliente.js'], ['cliente-id' => $id]);
+layout_start('Cliente', 'clientes', [
+    'mod-clientes.js', 'mod-procesos.js', 'mod-cobros.js', 'mod-fixs.js', 'mod-eventos.js', 'cliente.js',
+], ['cliente-id' => $id]);
 ?>
 <section id="ficha" class="card" aria-live="polite"></section>
 <section id="pestanas" class="seccion"></section>

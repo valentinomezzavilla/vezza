@@ -28,6 +28,18 @@
         dato('Cliente desde', c.fecha_inicio ? Panel.fmtFecha(c.fecha_inicio, true) : null)));
   }
 
+  function tabEntidad(modulo, url, textoNuevo, textoVacio, extra = () => null) {
+    return async function render(panel) {
+      const items = await Panel.get(url, { cliente_id: id });
+      const recargar = () => render(panel).catch(Panel.manejarError);
+      Panel.llenar(panel,
+        el('div', { class: 'toolbar' },
+          Panel.boton(textoNuevo, async () => { if (await modulo.nuevo({ cliente_id: String(id) })) recargar(); }, 'primario')),
+        extra(items),
+        items.length ? el('div', { class: 'lista' }, items.map((x) => modulo.item(x, recargar))) : Panel.vacio(textoVacio));
+    };
+  }
+
   async function renderBitacora(panel) {
     const notas = await Panel.get('/api/notas-cliente', { cliente_id: id });
     const texto = el('textarea', { class: 'filtro', rows: 3, placeholder: 'Escribí una nota…', 'aria-label': 'Nueva nota' });
@@ -65,8 +77,14 @@
     if (r) renderBitacora(panel).catch(Panel.manejarError);
   }
 
+  const totalCobros = (cobros) => (cobros.length ? el('p', { class: 'item-sub', text: `Total: ${Cobros.totales(cobros)}` }) : null);
+
   const TABS = [
+    { id: 'procesos', label: 'Procesos', render: tabEntidad(Procesos, '/api/procesos', '+ Nuevo proceso', 'Este cliente todavía no tiene procesos.') },
+    { id: 'cobros', label: 'Cobros', render: tabEntidad(Cobros, '/api/cobros', '+ Nuevo cobro', 'Este cliente todavía no tiene cobros.', totalCobros) },
+    { id: 'fixs', label: 'Fixs', render: tabEntidad(Fixs, '/api/fixs', '+ Nuevo fix', 'Sin fixs reportados.') },
     { id: 'bitacora', label: 'Bitácora', render: renderBitacora },
+    { id: 'eventos', label: 'Eventos', render: tabEntidad(Eventos, '/api/eventos', '+ Nuevo evento', 'Sin eventos con este cliente.') },
   ];
 
   cargarFicha()
