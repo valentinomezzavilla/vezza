@@ -2,5 +2,5 @@
 .env.*
 !.env.example
 !.env.testing.example
-vendor/
+/vendor/
 .phpunit.cache/
