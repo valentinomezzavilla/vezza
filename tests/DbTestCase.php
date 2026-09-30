@@ -37,4 +37,19 @@ abstract class DbTestCase extends TestCase
     {
         return $this->assertHttp(422, $fn)->campos;
     }
+
+    protected function crearCliente(string $nombre = 'Cliente Test'): int
+    {
+        return crud_insert('clientes', ['nombre' => $nombre]);
+    }
+
+    protected function crearUsuarioCliente(int $clienteId, string $email = 'ana@sol.com', ?string $clave = 'secreta1', bool $activo = true): int
+    {
+        return crud_insert('usuarios_cliente', [
+            'cliente_id' => $clienteId,
+            'email' => $email,
+            'password_hash' => $clave === null ? null : password_hash($clave, PASSWORD_BCRYPT, ['cost' => 4]),
+            'activo' => $activo ? 1 : 0,
+        ]);
+    }
 }
