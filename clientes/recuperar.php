@@ -16,12 +16,14 @@ if (isset($_GET['token']) || isset($_POST['token'])) {
 session_boot_cliente();
 $enviado = false;
 $error = null;
+$pendiente = null;
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     try {
         csrf_check(is_string($_POST['csrf'] ?? null) ? $_POST['csrf'] : null);
-        $email = is_string($_POST['email'] ?? null) ? $_POST['email'] : '';
-        cliente_recuperar_solicitar($email, client_ip());
-        $enviado = true; // misma respuesta exista o no la cuenta
+        // Misma respuesta exista o no la cuenta, y el trabajo de verdad se hace después de responder:
+        // así el tiempo de respuesta tampoco revela qué emails tienen acceso.
+        $pendiente = is_string($_POST['email'] ?? null) ? $_POST['email'] : '';
+        $enviado = true;
     } catch (HttpError $e) {
         $error = $e->getMessage();
         http_response_code($e->status);
@@ -53,3 +55,7 @@ portal_inicio('Recuperar contraseña', 'portal-auth');
 </main>
 <?php
 portal_fin();
+if ($pendiente !== null) {
+    responder_y_seguir();
+    cliente_recuperar_solicitar($pendiente, client_ip());
+}

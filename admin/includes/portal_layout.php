@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PORTAL_ASSET_V = '1';
+const PORTAL_ASSET_V = '2';
 
 /** Imprime el <head> y abre el <body>. La sesión del portal ya tiene que estar arrancada. */
 function portal_inicio(string $titulo, string $claseBody = ''): void

@@ -187,7 +187,7 @@ Vive en el mismo repo y el mismo `public_html`. Es PHP plano más la misma base 
 
 ### Primer deploy del portal
 
-1. Después del push, entrá a `https://vezzadev.com/admin/migraciones` y tocá **Aplicar migraciones** (aplica `002_portal`). Hacelo antes de entrar al portal: el código consulta tablas que recién existen al aplicar la migración.
+1. **Aplicá la migración `002_portal` ANTES del push.** El login del admin ahora consulta la columna `login_intentos.ambito`, que crea esa migración: si publicás el código antes, el login de `/admin-login` da un error 500 hasta que la apliques. Como `/admin/migraciones` pide estar logueado, si se te vence la sesión quedás afuera. La forma segura es importar `db/migrations/002_portal.sql` en phpMyAdmin (hPanel → Bases de datos → phpMyAdmin → Importar), igual que hiciste con la 001. La migración es aditiva: el código viejo sigue funcionando con el esquema nuevo. Si ya publicaste y tenés la sesión del admin abierta, podés aplicarla desde `https://vezzadev.com/admin/migraciones` → **Aplicar migraciones**.
 2. Agregá al `.env` (un nivel arriba de `public_html`):
 
    ```dotenv

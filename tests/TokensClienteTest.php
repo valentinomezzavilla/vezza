@@ -71,6 +71,22 @@ final class TokensClienteTest extends DbTestCase
         $this->assertHttp(410, fn() => cliente_token_consumir($t, 'invitacion', 'otra-clave'));
     }
 
+    public function test_las_claves_nuevas_se_guardan_con_el_costo_fijo(): void
+    {
+        $t = cliente_token_emitir($this->usuarioId, 'invitacion');
+        cliente_token_consumir($t, 'invitacion', 'nueva123');
+        $hash = (string)q_val('SELECT password_hash FROM usuarios_cliente WHERE id = ?', [$this->usuarioId]);
+        $this->assertSame(CLIENTE_BCRYPT_COST, password_get_info($hash)['options']['cost']);
+    }
+
+    public function test_activar_respeta_los_espacios_de_la_clave(): void
+    {
+        $t = cliente_token_emitir($this->usuarioId, 'invitacion');
+        cliente_token_consumir($t, 'invitacion', '  clave con espacios  ');
+        $this->assertSame('invalido', cliente_auth_attempt('ana@sol.com', 'clave con espacios', '1.1.1.1'));
+        $this->assertSame('ok', cliente_auth_attempt('ana@sol.com', '  clave con espacios  ', '1.1.1.1'));
+    }
+
     public function test_un_token_vencido_da_410(): void
     {
         $t = cliente_token_emitir($this->usuarioId, 'invitacion');

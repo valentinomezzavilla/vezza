@@ -1,5 +1,6 @@
 /* VEZZA · Portal de clientes. Base, botones, formularios y tarjetas vienen de admin.css. */
-body { padding-bottom: 0; }
+/* admin.css reserva espacio para la barra lateral del admin (padding-left desde 900px): el portal no la tiene. */
+body { padding: 0; }
 .portal-main { max-width: 960px; margin: 0 auto; padding: 16px; }
 @media (min-width: 768px) { .portal-main { padding: 24px 32px; } }
 

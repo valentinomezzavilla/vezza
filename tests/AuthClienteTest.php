@@ -131,6 +131,32 @@ final class AuthClienteTest extends DbTestCase
         $this->addToAssertionCount(2);
     }
 
+    public function test_el_hash_falso_es_una_constante_bcrypt_del_mismo_costo_que_los_guardados(): void
+    {
+        // Tiene que ser constante: un static no sobrevive entre requests web y el login de una cuenta
+        // inexistente tardaría el doble (hash + verify) que el de una cuenta real.
+        $info = password_get_info(CLIENTE_HASH_FALSO);
+        $this->assertSame('bcrypt', $info['algoName']);
+        $this->assertSame(CLIENTE_BCRYPT_COST, $info['options']['cost']);
+        $this->assertFalse(password_verify('cualquiera', CLIENTE_HASH_FALSO));
+    }
+
+    public function test_cambiar_la_clave_corta_las_sesiones_abiertas(): void
+    {
+        cliente_auth_attempt('ana@sol.com', 'secreta1', '1.1.1.1');
+        $this->assertSame($this->clienteId, require_cliente_api());
+        $token = cliente_token_emitir($this->usuarioId, 'recuperacion');
+        cliente_token_consumir($token, 'recuperacion', 'otra-clave-9');
+        $this->assertHttp(401, fn() => require_cliente_api());
+        $this->assertFalse(cliente_logged());
+    }
+
+    public function test_una_sesion_sin_huella_de_clave_no_vale(): void
+    {
+        $_SESSION['cliente'] = ['usuario_id' => $this->usuarioId];
+        $this->assertNull(cliente_actual());
+    }
+
     public function test_una_clave_de_mas_de_72_bytes_se_rechaza_sin_truncar(): void
     {
         $campos = $this->errores422(fn() => cliente_validar_clave(str_repeat('a', 73)));

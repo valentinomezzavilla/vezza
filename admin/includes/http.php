@@ -54,6 +54,24 @@ function request_json(): array
     return $datos;
 }
 
+/**
+ * Termina de mandar la respuesta al navegador y deja que el script siga trabajando.
+ * Sirve para que el tiempo de respuesta no dependa de trabajo lento que cambia según el caso
+ * (por ejemplo, mandar un mail solo si la cuenta existe). Llamar después de imprimir toda la página.
+ */
+function responder_y_seguir(): void
+{
+    ignore_user_abort(true);
+    // fastcgi_finish_request y litespeed_finish_request ya vacían los buffers de salida antes de cortar.
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } elseif (function_exists('litespeed_finish_request')) {
+        litespeed_finish_request();
+    } else {
+        flush();
+    }
+}
+
 function route_id(): ?int
 {
     $id = $_GET['id'] ?? null;

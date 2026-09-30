@@ -114,6 +114,15 @@ final class AccesoClienteTest extends DbTestCase
         $this->assertTrue(cliente_token_valido($this->tokenDe($r), 'invitacion'));
     }
 
+    public function test_reinvitar_a_un_desactivado_con_clave_no_la_pisa(): void
+    {
+        $this->crearUsuarioCliente($this->clienteId, 'cli@sol.com', 'secreta1');
+        acceso_cliente_set_activo($this->clienteId, false);
+        acceso_cliente_invitar($this->clienteId, []);
+        $hash = (string)q_val('SELECT password_hash FROM usuarios_cliente WHERE cliente_id = ?', [$this->clienteId]);
+        $this->assertTrue(password_verify('secreta1', $hash));
+    }
+
     public function test_si_el_mail_falla_la_invitacion_igual_devuelve_el_link(): void
     {
         Mail::$transporte = fn() => throw new RuntimeException('n8n caído');

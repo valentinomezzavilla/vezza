@@ -2,6 +2,10 @@
 declare(strict_types=1);
 
 const CLIENTE_CLAVE_MIN = 6;
+const CLIENTE_BCRYPT_COST = 10;
+// Hash bcrypt constante, del mismo costo que los guardados: el login de una cuenta inexistente hace el mismo
+// trabajo (un verify) que el de una real. Tiene que ser constante: una variable static no sobrevive entre requests.
+const CLIENTE_HASH_FALSO = '$2y$10$nw76ui5LGN8LXGpsDmPLau.xgHIoFpo32tzDu.ADzfXmOocIXT3TW';
 const CLIENTE_LOGIN_MAX_INTENTOS = 5; // por IP y por cuenta, dentro de LOGIN_VENTANA_MIN minutos
 const CLIENTE_TOKEN_HORAS = ['invitacion' => 72, 'recuperacion' => 2];
 const RECUPERAR_MAX_POR_IP = 5; // pedidos de recuperación por IP, dentro de LOGIN_VENTANA_MIN minutos
@@ -30,11 +34,15 @@ function cliente_validar_clave(string $clave): void
     }
 }
 
-function cliente_hash_falso(): string
+function cliente_hash_clave(string $clave): string
 {
-    static $hash = null;
-    // Hash real del mismo costo que los guardados: así la respuesta tarda igual exista o no la cuenta.
-    return $hash ??= password_hash(bin2hex(random_bytes(8)), PASSWORD_DEFAULT);
+    return password_hash($clave, PASSWORD_BCRYPT, ['cost' => CLIENTE_BCRYPT_COST]);
+}
+
+/** Sesión válida solo mientras la contraseña no cambie: cambiarla corta las sesiones que ya estaban abiertas. */
+function cliente_huella(string $passwordHash): string
+{
+    return substr(hash('sha256', $passwordHash), 0, 32);
 }
 
 function cliente_login_bloqueado(string $ip, string $email): bool
@@ -55,13 +63,13 @@ function cliente_auth_attempt(string $email, string $clave, string $ip): string
     $u = q_one('SELECT * FROM usuarios_cliente WHERE email = ?', [$email]);
     $puedeEntrar = $u !== null && (int)$u['activo'] === 1 && $u['password_hash'] !== null;
     // Se verifica siempre contra algún hash para no filtrar por timing qué cuentas existen.
-    $claveOk = password_verify($clave, $puedeEntrar ? $u['password_hash'] : cliente_hash_falso());
+    $claveOk = password_verify($clave, $puedeEntrar ? $u['password_hash'] : CLIENTE_HASH_FALSO);
     if ($puedeEntrar && $claveOk) {
         db()->prepare("DELETE FROM login_intentos WHERE ambito = 'cliente' AND clave = ?")->execute([$email]);
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_regenerate_id(true);
         }
-        $_SESSION['cliente'] = ['usuario_id' => (int)$u['id']];
+        $_SESSION['cliente'] = ['usuario_id' => (int)$u['id'], 'huella' => cliente_huella($u['password_hash'])];
         $_SESSION['last_activity'] = time();
         unset($_SESSION['csrf']);
         db()->prepare('UPDATE usuarios_cliente SET ultimo_login = NOW() WHERE id = ?')->execute([$u['id']]);
@@ -83,14 +91,14 @@ function cliente_logged(): bool
 function cliente_actual(): ?array
 {
     $s = $_SESSION['cliente'] ?? null;
-    if (!is_array($s) || !isset($s['usuario_id'])) {
+    if (!is_array($s) || !isset($s['usuario_id'], $s['huella']) || !is_string($s['huella'])) {
         return null;
     }
     $u = q_one(
-        'SELECT id AS usuario_id, cliente_id, email FROM usuarios_cliente WHERE id = ? AND activo = 1 AND password_hash IS NOT NULL',
+        'SELECT id AS usuario_id, cliente_id, email, password_hash FROM usuarios_cliente WHERE id = ? AND activo = 1 AND password_hash IS NOT NULL',
         [(int)$s['usuario_id']]
     );
-    if ($u === null) {
+    if ($u === null || !hash_equals(cliente_huella($u['password_hash']), $s['huella'])) {
         unset($_SESSION['cliente']);
         return null;
     }
@@ -163,7 +171,7 @@ function cliente_token_consumir(string $token, string $tipo, string $clave): int
     cliente_validar_clave($clave);
     // El UPDATE condicionado al hash hace atómico el "un solo uso": dos pedidos a la vez no ganan los dos.
     $st = db()->prepare('UPDATE usuarios_cliente SET password_hash = ?, token_hash = NULL, token_tipo = NULL, token_expira = NULL WHERE id = ? AND token_hash = ?');
-    $st->execute([password_hash($clave, PASSWORD_DEFAULT), $u['id'], $u['token_hash']]);
+    $st->execute([cliente_hash_clave($clave), $u['id'], $u['token_hash']]);
     if ($st->rowCount() !== 1) {
         throw new HttpError(410, 'Este link venció o ya se usó.');
     }
