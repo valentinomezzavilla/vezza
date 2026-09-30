@@ -1,0 +1,11 @@
+/* VEZZA · Portal de clientes. Base, botones, formularios y tarjetas vienen de admin.css. */
+body { padding-bottom: 0; }
+.portal-main { max-width: 960px; margin: 0 auto; padding: 16px; }
+@media (min-width: 768px) { .portal-main { padding: 24px 32px; } }
+
+.portal-auth { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
+.portal-auth-card { width: min(420px, 100%); }
+.portal-auth-card h1 { margin-bottom: 6px; }
+.portal-auth-card > p { color: var(--muted); margin-bottom: 18px; }
+.portal-auth-card .btn-primario { width: 100%; }
+.portal-enlace { margin: 16px 0 0; text-align: center; font-size: .9rem; }

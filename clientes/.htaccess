@@ -1,0 +1,2 @@
+# /clientes (sin barra) lo resuelve el .htaccess raíz; sin esto mod_dir redirige a /clientes/ antes.
+DirectorySlash Off
