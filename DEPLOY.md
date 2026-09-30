@@ -180,3 +180,29 @@ diff antes.txt despues.txt   # no tiene que haber diferencias
    http://localhost:8080/admin.
 4. Tests: `php vendor/bin/phpunit`. Usan la base `vezza_admin_test`, definida
    en `.env.testing`.
+
+## Portal de clientes (`/clientes`)
+
+Vive en el mismo repo y el mismo `public_html`. Es PHP plano más la misma base MySQL del panel. El `git push` sigue siendo el único paso de deploy.
+
+### Primer deploy del portal
+
+1. Después del push, entrá a `https://vezzadev.com/admin/migraciones` y tocá **Aplicar migraciones** (aplica `002_portal`). Hacelo antes de entrar al portal: el código consulta tablas que recién existen al aplicar la migración.
+2. Agregá al `.env` (un nivel arriba de `public_html`):
+
+   ```dotenv
+   PORTAL_URL=https://vezzadev.com
+   MAIL_WEBHOOK_URL=https://vmezza.app.n8n.cloud/webhook/vezza-portal-mail
+   MAIL_WEBHOOK_SECRET=un-secreto-largo-y-aleatorio
+   ```
+
+   El secreto tiene que ser el mismo que usa el workflow de n8n "VEZZA · Mails del portal". Sin `MAIL_WEBHOOK_URL` el portal funciona igual, pero los mails no salen: desde la ficha del cliente copiás el link de invitación y lo mandás por WhatsApp o Instagram.
+3. Corré `scripts/verificar-portal.sh https://vezzadev.com` y confirmá `Todo OK`.
+
+### Cómo dar acceso a un cliente
+
+En el admin, abrí la ficha del cliente → **Acceso al portal** → **Invitar al portal**. El cliente recibe un mail con un link que vale 72 horas para elegir su contraseña (mínimo 6 caracteres). Si el mail no llega, copiá el link que muestra el panel. Desde ahí también podés mandar una invitación nueva o desactivar el acceso.
+
+### Si un cliente se olvida la contraseña
+
+Puede pedir un link en `/clientes/recuperar` (vale 2 horas). Si no le llega, mandale una invitación nueva desde su ficha.
