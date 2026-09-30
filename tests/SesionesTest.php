@@ -30,4 +30,14 @@ final class SesionesTest extends TestCase
         $esperada = dirname($raizRepo) . DIRECTORY_SEPARATOR . 'vezza_sessions';
         $this->assertSame(str_replace('\\', '/', $esperada), str_replace('\\', '/', sessions_dir(false)));
     }
+
+    public function test_session_boot_ambito_en_cli_solo_inicializa_la_sesion(): void
+    {
+        $_SESSION = ['x' => 1];
+        session_boot_ambito('vezza_cliente', 'cliente');
+        $this->assertSame(['x' => 1], $_SESSION);
+        session_boot();
+        $this->assertSame(['x' => 1], $_SESSION);
+        $_SESSION = [];
+    }
 }

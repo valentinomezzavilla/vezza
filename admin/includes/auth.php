@@ -17,6 +17,15 @@ function sessions_dir(bool $crear = true): string
 
 function session_boot(): void
 {
+    session_boot_ambito('vezza_admin', 'admin');
+}
+
+/**
+ * Arranca la sesión de un ámbito (admin o cliente). Cada ámbito tiene su cookie y su flag de sesión,
+ * y cada punto de entrada arranca uno solo: así una sesión de un ámbito nunca sirve en el otro.
+ */
+function session_boot_ambito(string $cookie, string $flag): void
+{
     if (PHP_SAPI === 'cli') {
         $_SESSION ??= [];
         return;
@@ -32,7 +41,7 @@ function session_boot(): void
     }
     ini_set('session.gc_maxlifetime', (string)SESION_DURACION);
     ini_set('session.use_strict_mode', '1');
-    session_name('vezza_admin');
+    session_name($cookie);
     $params = [
         'lifetime' => SESION_DURACION,
         'path' => '/',
@@ -42,7 +51,7 @@ function session_boot(): void
     ];
     session_set_cookie_params($params);
     session_start();
-    if (!empty($_SESSION['admin'])) {
+    if (!empty($_SESSION[$flag])) {
         if (time() - (int)($_SESSION['last_activity'] ?? 0) > SESION_DURACION) {
             $_SESSION = [];
             return;
@@ -66,7 +75,7 @@ function auth_logged(): bool
 function login_bloqueado(string $ip): bool
 {
     $n = (int)q_val(
-        'SELECT COUNT(*) FROM login_intentos WHERE ip = ? AND creado_en > (NOW() - INTERVAL ' . LOGIN_VENTANA_MIN . ' MINUTE)',
+        "SELECT COUNT(*) FROM login_intentos WHERE ambito = 'admin' AND ip = ? AND creado_en > (NOW() - INTERVAL " . LOGIN_VENTANA_MIN . ' MINUTE)',
         [$ip]
     );
     return $n >= LOGIN_MAX_INTENTOS;
@@ -84,7 +93,7 @@ function auth_attempt(string $usuario, string $clave, string $ip): string
     $usuarioOk = hash_equals((string)$usuarioEsperado, $usuario);
     $claveOk = password_verify($clave, $hash ?? '$2y$04$invalidinvalidinvalidinvalidinvalidinvalidinvalidin');
     if ($usuarioEsperado !== null && $hash !== null && $usuarioOk && $claveOk) {
-        db()->prepare('DELETE FROM login_intentos WHERE ip = ?')->execute([$ip]);
+        db()->prepare("DELETE FROM login_intentos WHERE ip = ? AND ambito = 'admin'")->execute([$ip]);
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_regenerate_id(true);
         }

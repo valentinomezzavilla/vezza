@@ -81,4 +81,20 @@ final class AuthTest extends DbTestCase
         require_admin_api();
         $this->addToAssertionCount(1);
     }
+
+    public function test_el_bloqueo_del_admin_ignora_los_intentos_del_portal(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            db()->exec("INSERT INTO login_intentos (ip, ambito, clave) VALUES ('8.8.8.8', 'cliente', 'x@y.com')");
+        }
+        $this->assertFalse(login_bloqueado('8.8.8.8'));
+        $this->assertSame('ok', auth_attempt('valen', 'clave-secreta', '8.8.8.8'));
+    }
+
+    public function test_el_login_exitoso_del_admin_no_borra_los_intentos_del_portal(): void
+    {
+        db()->exec("INSERT INTO login_intentos (ip, ambito, clave) VALUES ('9.9.9.9', 'cliente', 'x@y.com')");
+        auth_attempt('valen', 'clave-secreta', '9.9.9.9');
+        $this->assertSame(1, (int)q_val("SELECT COUNT(*) FROM login_intentos WHERE ip = '9.9.9.9' AND ambito = 'cliente'"));
+    }
 }
