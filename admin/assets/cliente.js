@@ -28,6 +28,15 @@
         dato('Cliente desde', c.fecha_inicio ? Panel.fmtFecha(c.fecha_inicio, true) : null)));
   }
 
+  async function cargarAcceso() {
+    const [c, acceso] = await Promise.all([
+      Panel.get(`/api/clientes/${id}`),
+      Panel.get('/api/acceso-cliente', { cliente_id: id }),
+    ]);
+    Panel.llenar(document.getElementById('acceso'),
+      Acceso.vista(id, c, acceso, () => cargarAcceso().catch(Panel.manejarError)));
+  }
+
   function tabEntidad(modulo, url, textoNuevo, textoVacio, extra = () => null) {
     return async function render(panel) {
       const items = await Panel.get(url, { cliente_id: id });
@@ -90,4 +99,5 @@
   cargarFicha()
     .then(() => Panel.tabs(document.getElementById('pestanas'), TABS))
     .catch(Panel.manejarError);
+  cargarAcceso().catch(Panel.manejarError);
 })();
