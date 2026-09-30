@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 const CLIENTE_CLAVE_MIN = 6;
 const CLIENTE_LOGIN_MAX_INTENTOS = 5; // por IP y por cuenta, dentro de LOGIN_VENTANA_MIN minutos
+const CLIENTE_TOKEN_HORAS = ['invitacion' => 72, 'recuperacion' => 2];
+const RECUPERAR_MAX_POR_IP = 5; // pedidos de recuperación por IP, dentro de LOGIN_VENTANA_MIN minutos
 
 function session_boot_cliente(): void
 {
@@ -120,4 +122,74 @@ function require_cliente_api(): int
 function cliente_logout(): void
 {
     auth_logout();
+}
+
+/**
+ * Emite un token de un solo uso y devuelve el valor en claro (es lo que va en el link).
+ * En la base queda solo su sha256, y un token nuevo invalida el anterior del mismo usuario.
+ */
+function cliente_token_emitir(int $usuarioId, string $tipo): string
+{
+    if (!isset(CLIENTE_TOKEN_HORAS[$tipo])) {
+        throw new InvalidArgumentException("Tipo de token desconocido: $tipo");
+    }
+    $plano = bin2hex(random_bytes(32));
+    $horas = CLIENTE_TOKEN_HORAS[$tipo];
+    db()->prepare("UPDATE usuarios_cliente SET token_hash = ?, token_tipo = ?, token_expira = NOW() + INTERVAL $horas HOUR WHERE id = ?")
+        ->execute([hash('sha256', $plano), $tipo, $usuarioId]);
+    return $plano;
+}
+
+function cliente_token_usuario(string $token, string $tipo): ?array
+{
+    if (!preg_match('/^[0-9a-f]{64}$/', $token)) {
+        return null;
+    }
+    return q_one(
+        'SELECT * FROM usuarios_cliente WHERE token_hash = ? AND token_tipo = ? AND token_expira > NOW() AND activo = 1',
+        [hash('sha256', $token), $tipo]
+    );
+}
+
+function cliente_token_valido(string $token, string $tipo): bool
+{
+    return cliente_token_usuario($token, $tipo) !== null;
+}
+
+/** Fija la contraseña con un token válido y lo deja inservible. Devuelve el usuario_id. */
+function cliente_token_consumir(string $token, string $tipo, string $clave): int
+{
+    $u = cliente_token_usuario($token, $tipo) ?? throw new HttpError(410, 'Este link venció o ya se usó.');
+    cliente_validar_clave($clave);
+    // El UPDATE condicionado al hash hace atómico el "un solo uso": dos pedidos a la vez no ganan los dos.
+    $st = db()->prepare('UPDATE usuarios_cliente SET password_hash = ?, token_hash = NULL, token_tipo = NULL, token_expira = NULL WHERE id = ? AND token_hash = ?');
+    $st->execute([password_hash($clave, PASSWORD_DEFAULT), $u['id'], $u['token_hash']]);
+    if ($st->rowCount() !== 1) {
+        throw new HttpError(410, 'Este link venció o ya se usó.');
+    }
+    db()->prepare("DELETE FROM login_intentos WHERE ambito = 'cliente' AND clave = ?")->execute([$u['email']]);
+    return (int)$u['id'];
+}
+
+/**
+ * Pedido de "olvidé mi contraseña". Responde siempre igual: nunca revela si el email existe.
+ * Solo manda el mail a cuentas activas que ya activaron su contraseña.
+ */
+function cliente_recuperar_solicitar(string $email, string $ip): void
+{
+    $email = cliente_email_normalizar($email);
+    $pedidos = (int)q_val(
+        "SELECT COUNT(*) FROM login_intentos WHERE ambito = 'recuperar' AND ip = ? AND creado_en > (NOW() - INTERVAL " . LOGIN_VENTANA_MIN . ' MINUTE)',
+        [$ip]
+    );
+    if ($pedidos >= RECUPERAR_MAX_POR_IP) {
+        return;
+    }
+    db()->prepare("INSERT INTO login_intentos (ip, ambito) VALUES (?, 'recuperar')")->execute([$ip]);
+    $u = q_one('SELECT * FROM usuarios_cliente WHERE email = ? AND activo = 1 AND password_hash IS NOT NULL', [$email]);
+    if ($u === null) {
+        return;
+    }
+    $token = cliente_token_emitir((int)$u['id'], 'recuperacion');
+    mail_enviar('recuperacion', $u['email'], ['link' => portal_url('/clientes/recuperar?token=' . $token)]);
 }
