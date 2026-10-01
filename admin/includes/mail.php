@@ -40,7 +40,8 @@ function mail_post(string $url, string $secreto, array $payload): bool
 {
     $contexto = stream_context_create(['http' => [
         'method' => 'POST',
-        'timeout' => 6,
+        // n8n responde recién cuando el SMTP terminó de enviar (~9-11 s); con menos corta y avisa error aunque el mail salga.
+        'timeout' => 25,
         'ignore_errors' => true,
         'header' => "Content-Type: application/json\r\nX-Webhook-Secret: $secreto\r\n",
         'content' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
