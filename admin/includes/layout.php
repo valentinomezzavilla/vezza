@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PANEL_ASSET_V = '4';
+const PANEL_ASSET_V = '5';
 
 const NAV_PRINCIPAL = [
     'inicio' => ['/admin', 'Inicio'],
@@ -16,6 +16,7 @@ const NAV_MAS = [
     'fixs' => ['/admin/fixs', 'Fixs'],
     'agenda' => ['/admin/agenda', 'Agenda'],
     'reportes' => ['/admin/reportes', 'Reportes'],
+    'monitor' => ['/admin/monitor', 'Monitor'],
 ];
 
 // Trazos de íconos Lucide (ISC). Solo constantes: nunca se arma SVG con datos del usuario.
@@ -29,6 +30,7 @@ const ICONOS = [
     'fixs' => '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     'agenda' => '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
     'reportes' => '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    'monitor' => '<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>',
     'migraciones' => '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>',
     'mas' => '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
     'salir' => '<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',

@@ -103,9 +103,11 @@ DirectoryIndex index.html
   RewriteRule ^admin/?$ admin/index.php [L,QSA]
   RewriteRule ^admin/clientes/([0-9]+)$ admin/cliente.php?id=$1 [L,QSA]
   RewriteRule ^admin/procesos/([0-9]+)$ admin/proceso.php?id=$1 [L,QSA]
-  RewriteRule ^admin/(clientes|procesos|cobros|gastos|tareas|fixs|agenda|reportes|migraciones)$ admin/$1.php [L,QSA]
+  RewriteRule ^admin/(clientes|procesos|cobros|gastos|tareas|fixs|agenda|reportes|monitor|migraciones)$ admin/$1.php [L,QSA]
   RewriteRule ^api/suscripciones/([0-9]+)/pagar$ api/suscripciones.php?id=$1&accion=pagar [L,QSA]
   RewriteRule ^api/reportes/balance$ api/reportes.php [L,QSA]
+  RewriteRule ^api/monitor/chequear$ api/monitor.php?accion=chequear [L,QSA]
+  RewriteRule ^api/monitor/([0-9]+)/chequear$ api/monitor.php?id=$1&accion=chequear [L,QSA]
   RewriteRule ^api/([a-z-]+)/([0-9]+)$ api/$1.php?id=$2 [L,QSA]
   RewriteRule ^api/([a-z-]+)$ api/$1.php [L,QSA]
 </IfModule>
