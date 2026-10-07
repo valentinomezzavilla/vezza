@@ -206,3 +206,51 @@ En el admin, abrí la ficha del cliente → **Acceso al portal** → **Invitar a
 ### Si un cliente se olvida la contraseña
 
 Puede pedir un link en `/clientes/recuperar` (vale 2 horas). Si no le llega, mandale una invitación nueva desde su ficha.
+
+## Monitor de servicios (`/admin/monitor`)
+
+Vigila desde afuera, sin instalar nada en el VPS: cada servicio se chequea desde el panel por **Web** (HTTP/HTTPS, con código esperado opcional), **Puerto TCP** o **Certificado SSL** (avisa cuando faltan menos días que el umbral). Un servicio pasa a "caído" recién después de N fallos seguidos (por defecto 2) y vuelve a "operativo" con el primer chequeo bueno; cada cambio queda en el historial y dispara un mail. No ve CPU, RAM ni disco del VPS: para eso haría falta un agente dentro del servidor.
+
+Los destinos tienen que ser públicos: el panel rechaza dominios que resuelvan a IP privadas o reservadas (127.x, 10.x, 192.168.x, 169.254.x…), para que no se pueda usar para golpear servicios internos del hosting.
+
+### Primer deploy
+
+1. **Aplicá la migración `003_monitor`.** Es aditiva. Desde `https://vezzadev.com/admin/migraciones` → **Aplicar migraciones**, o importando `db/migrations/003_monitor.sql` en phpMyAdmin.
+2. **Cron en hPanel** (Avanzado → Cron Jobs), cada minuto. El intervalo de cada servicio lo decide el panel; el cron solo corre los que ya les toca:
+
+   ```
+   * * * * *  /usr/bin/php /home/uXXXXXXX/domains/vezzadev.com/public_html/scripts/monitor-run.php
+   ```
+
+   Ajustá la ruta a la de tu hosting. `/scripts/` está bloqueado por `.htaccess` y el script se niega a correr desde la web, así que solo lo ejecuta el cron. Si no programás el cron, el botón **Chequear ahora** del panel hace lo mismo a mano.
+3. **Alertas por mail (opcional).** Agregá al `.env`, junto a las demás variables:
+
+   ```dotenv
+   MONITOR_ALERTA_EMAIL=info@vezzadev.com
+   ```
+
+   Usa el mismo webhook de n8n que los mails del portal (`MAIL_WEBHOOK_URL` y `MAIL_WEBHOOK_SECRET`). **Falta un paso en n8n:** el workflow "VEZZA · Mails del portal" tiene que aceptar la plantilla `monitor_alerta`. Le llega este JSON y alcanza con mandar `datos.asunto` como asunto:
+
+   ```json
+   {
+     "plantilla": "monitor_alerta",
+     "destino": "info@vezzadev.com",
+     "datos": {
+       "evento": "caida | recuperacion",
+       "asunto": "[CAÍDO] Nombre del servicio",
+       "servicio": "...", "grupo": "...", "tipo": "http | tcp | ssl",
+       "destino": "https://... o host:puerto",
+       "detalle": "HTTP 502",
+       "cuando": "2026-10-07 19:34:12",
+       "duracion": "2 h 5 min (solo en recuperación)",
+       "panel": "https://vezzadev.com/admin/monitor"
+     }
+   }
+   ```
+
+   Sin `MONITOR_ALERTA_EMAIL` no se manda nada, y si el mail falla el chequeo sigue igual (el evento queda sin marcar como notificado).
+4. Corré `scripts/verificar-monitor.sh https://vezzadev.com` y confirmá `Todo OK`.
+
+### Cómo se usa
+
+En `/admin/monitor`, **+ Servicio** y elegí qué chequear. Con el campo **Grupo** (por ejemplo "VPS Hostinger") se agrupan los servicios del mismo servidor. Los chequeos de los últimos 30 días se guardan para calcular la disponibilidad de las últimas 24 h; los más viejos se borran solos.
