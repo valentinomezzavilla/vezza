@@ -627,6 +627,52 @@ final class PagosMpTest extends DbTestCase
         $this->assertSame([1, 1], array_map('intval', array_column($this->notificaciones(), 'sin_cobro')));
     }
 
+    public function test_cobro_con_pago_mp_encuentra_el_cobro_por_el_id_del_pago(): void
+    {
+        $cobro = $this->cobro(['estado' => 'pagado', 'fecha_pago' => '2026-10-02', 'mp_payment_id' => '800']);
+        $this->cobro();
+
+        $this->assertSame($cobro, (int)cobro_con_pago_mp('800')['id']);
+        $this->assertSame($cobro, (int)cobro_con_pago_mp('800', true)['id']);
+        $this->assertNull(cobro_con_pago_mp('801'));
+        $this->assertNull(cobro_con_pago_mp('801', true));
+    }
+
+    public function test_un_pago_de_debito_ya_registrado_responde_ya_pagado_por_cualquiera_de_sus_dos_avisos(): void
+    {
+        // Mercado Pago avisa el mismo cobro de débito como payment y como subscription_authorized_payment.
+        $susc = $this->debito();
+        $octubre = $this->cobroDeSuscripcion($susc, '2026-10', '85000.00', ['estado' => 'pagado', 'fecha_pago' => '2026-10-02', 'mp_payment_id' => '800']);
+        $noviembre = $this->cobroDeSuscripcion($susc, '2026-11');
+        $this->mp['/authorized_payments/900'] = ['id' => 900, 'preapproval_id' => 'pre-1', 'status' => 'processed', 'payment' => ['id' => 800, 'status' => 'approved']];
+        $this->ofrecerPago($this->pagoMp('800', 'susc-' . $susc, ['preapproval_id' => 'pre-1']));
+
+        $this->assertSame('ya_pagado', $this->notificar('800')['resultado']);
+        $this->assertSame('ya_pagado', $this->notificar('900', 'subscription_authorized_payment')['resultado']);
+
+        $this->assertSame('pendiente', $this->cobroDe($noviembre)['estado'], 'no paga el cobro del mes siguiente');
+        $this->assertNull($this->cobroDe($noviembre)['mp_payment_id']);
+        foreach ($this->notificaciones() as $n) {
+            $this->assertSame(0, (int)$n['sin_cobro'], 'no es un pago huérfano');
+            $this->assertNull($n['error']);
+            $this->assertSame($octubre, (int)$n['cobro_id']);
+        }
+    }
+
+    public function test_un_pago_de_debito_ya_registrado_sin_otro_cobro_pendiente_no_queda_sin_cobro(): void
+    {
+        $susc = $this->debito();
+        $octubre = $this->cobroDeSuscripcion($susc, '2026-10', '85000.00', ['estado' => 'pagado', 'fecha_pago' => '2026-10-02', 'mp_payment_id' => '800']);
+        $this->ofrecerPago($this->pagoMp('800', 'susc-' . $susc, ['preapproval_id' => 'pre-1']));
+
+        $r = $this->notificar('800');
+
+        $this->assertSame('ya_pagado', $r['resultado']);
+        $n = $this->notificaciones()[0];
+        $this->assertSame(0, (int)$n['sin_cobro']);
+        $this->assertNull($n['error']);
+        $this->assertSame($octubre, (int)$n['cobro_id']);
+    }
     public function test_el_cobro_de_un_debito_de_otra_suscripcion_no_se_toca(): void
     {
         $mia = $this->debito('pre-1');
