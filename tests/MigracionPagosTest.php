@@ -56,6 +56,17 @@ final class MigracionPagosTest extends DbTestCase
         crud_insert('avisos_pago', ['cobro_id' => $cobro, 'tipo' => 'previo', 'canal' => 'mail', 'numero' => 0, 'ok' => 1]);
     }
 
+    public function test_un_aviso_nace_sin_enviar(): void
+    {
+        $s = $this->crearSuscripcion();
+        $c = (int)q_val('SELECT cliente_id FROM suscripciones_cliente WHERE id = ?', [$s]);
+        $cobro = $this->crearCobro($c, $s, '2026-10');
+
+        $id = crud_insert('avisos_pago', ['cobro_id' => $cobro, 'tipo' => 'previo', 'canal' => 'mail']);
+
+        $this->assertSame(0, (int)q_val('SELECT ok FROM avisos_pago WHERE id = ?', [$id]));
+    }
+
     public function test_las_suscripciones_existentes_copian_monto_y_moneda_del_plan(): void
     {
         $plan = crud_insert('planes', ['nombre' => 'Hosting', 'monto' => '15000.50', 'moneda' => 'USD', 'frecuencia' => 'mensual']);

@@ -47,7 +47,8 @@ CREATE TABLE mp_notificaciones (
   CONSTRAINT fk_mp_notif_cobro FOREIGN KEY (cobro_id) REFERENCES cobros (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Avisos de pago enviados por cobro, para no mandar dos veces el mismo.
+-- Avisos de pago por cobro, para no mandar dos veces el mismo. La fila se inserta antes de
+-- enviar (la clave única es el reclamo) y nace con ok = 0, se pasa a 1 recién al confirmarse el envío.
 CREATE TABLE avisos_pago (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   cobro_id INT UNSIGNED NOT NULL,
@@ -55,7 +56,7 @@ CREATE TABLE avisos_pago (
   canal ENUM('mail','whatsapp') NOT NULL,
   numero INT NOT NULL DEFAULT 0,
   enviado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  ok TINYINT(1) NOT NULL DEFAULT 1,
+  ok TINYINT(1) NOT NULL DEFAULT 0,
   UNIQUE KEY uk_avisos_pago (cobro_id, tipo, canal, numero),
   CONSTRAINT fk_avisos_pago_cobro FOREIGN KEY (cobro_id) REFERENCES cobros (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
