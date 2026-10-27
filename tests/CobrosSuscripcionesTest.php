@@ -206,7 +206,7 @@ final class CobrosSuscripcionesTest extends DbTestCase
         $this->assertSame('/checkout/preferences', $ruta);
         $this->assertSame('acme@sol.com', $cuerpo['payer']['email']);
         $cobro = $this->cobros($link)[0];
-        $this->assertSame((string)$cobro['id'], $cuerpo['external_reference']);
+        $this->assertSame('cobro-' . $cobro['id'], $cuerpo['external_reference']);
         $this->assertSame('https://mp.test/pagar/pref-1', $cobro['link_pago']);
         $this->assertSame('pref-1', $cobro['mp_preference_id']);
         $this->assertNull($this->cobros($transf)[0]['link_pago']);

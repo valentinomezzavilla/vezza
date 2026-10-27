@@ -38,7 +38,7 @@ final class MercadoPagoTest extends TestCase
         [$metodo, $ruta, $cuerpo] = $this->llamadas[0];
         $this->assertSame('POST', $metodo);
         $this->assertSame('/checkout/preferences', $ruta);
-        $this->assertSame('42', $cuerpo['external_reference']);
+        $this->assertSame('cobro-42', $cuerpo['external_reference']);
         $this->assertSame('https://demo.test/api/mp-webhook', $cuerpo['notification_url']);
         $this->assertSame('ana@sol.com', $cuerpo['payer']['email']);
         $this->assertSame('ARS', $cuerpo['items'][0]['currency_id']);
@@ -108,7 +108,7 @@ final class MercadoPagoTest extends TestCase
         $this->assertSame('POST', $metodo);
         $this->assertSame('/preapproval', $ruta);
         $this->assertSame('ana@sol.com', $cuerpo['payer_email']);
-        $this->assertSame('7', $cuerpo['external_reference']);
+        $this->assertSame('susc-7', $cuerpo['external_reference']);
         $this->assertSame('pending', $cuerpo['status']);
         $this->assertSame('https://demo.test/clientes/pagos', $cuerpo['back_url']);
         $this->assertSame('Mantenimiento', $cuerpo['reason']);

@@ -56,7 +56,7 @@ final class PagosMpTest extends DbTestCase
     {
         return crud_insert('cobros', $extra + [
             'cliente_id' => $this->cliente, 'concepto' => 'Mantenimiento · octubre 2026', 'monto' => '85000.00',
-            'moneda' => 'ARS', 'fecha_vencimiento' => '2026-11-01', 'estado' => 'pendiente',
+            'moneda' => 'ARS', 'fecha_vencimiento' => '2026-11-01', 'estado' => 'pendiente', 'mp_preference_id' => 'pref-1',
         ]);
     }
 
@@ -131,12 +131,17 @@ final class PagosMpTest extends DbTestCase
         return array_values(array_filter($this->mails, fn(array $m) => $m[0] === $plantilla));
     }
 
+    private function despachar(): array
+    {
+        return avisos_despachar_inmediatos();
+    }
+
     // ---- firma ------------------------------------------------------------------------------------------------
 
     public function test_firma_invalida_responde_401_y_no_cambia_nada(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $r = $this->notificar('555', 'payment', $this->firmar('555', null, 'req-1', 'otro-secreto'));
 
@@ -150,7 +155,7 @@ final class PagosMpTest extends DbTestCase
     public function test_sin_firma_o_sin_secreto_configurado_responde_401(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $sinFirma = mp_webhook_procesar([], ['data_id' => '555', 'type' => 'payment'], '{}');
         env_set('MP_WEBHOOK_SECRET', null);
@@ -162,17 +167,14 @@ final class PagosMpTest extends DbTestCase
         $this->assertSame([], $this->notificaciones());
     }
 
-    public function test_una_firma_de_hace_mas_de_cinco_minutos_responde_401(): void
+    public function test_una_notificacion_bien_firmada_se_procesa_aunque_su_ts_sea_viejo(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
-        $vieja = $this->notificar('555', 'payment', $this->firmar('555', (time() - 301) * 1000));
-        $this->assertSame(401, $vieja['http']);
-        $this->assertSame([], $this->notificaciones());
+        $r = $this->notificar('555', 'payment', $this->firmar('555', (time() - 7200) * 1000));
 
-        $reciente = $this->notificar('555', 'payment', $this->firmar('555', (time() - 240) * 1000));
-        $this->assertSame(200, $reciente['http']);
+        $this->assertSame(200, $r['http'], 'Mercado Pago reintenta con la firma original: alcanza con que el HMAC sea válido');
         $this->assertSame('pagado', $this->cobroDe($cobro)['estado']);
     }
 
@@ -204,7 +206,7 @@ final class PagosMpTest extends DbTestCase
     public function test_el_data_id_puede_llegar_como_data_punto_id(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $r = mp_webhook_procesar($this->firmar('555'), ['data.id' => '555', 'type' => 'payment'], '{}');
 
@@ -217,7 +219,7 @@ final class PagosMpTest extends DbTestCase
     public function test_pago_aprobado_marca_pagado_con_fecha_metodo_e_id(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $r = $this->notificar('555');
 
@@ -233,7 +235,7 @@ final class PagosMpTest extends DbTestCase
     public function test_la_notificacion_queda_registrada_con_el_cobro_y_el_estado_del_pago(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $this->notificar('555');
 
@@ -249,31 +251,101 @@ final class PagosMpTest extends DbTestCase
         $this->assertStringContainsString('"id":"555"', (string)$n[0]['payload']);
     }
 
-    public function test_el_pago_aprobado_manda_la_confirmacion_una_vez(): void
+    public function test_procesar_un_pago_no_manda_mails_y_deja_un_aviso_pendiente(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $this->notificar('555');
 
+        $this->assertSame([], $this->mails, 'el mail no sale dentro del request del webhook');
+        $avisos = $this->avisos($cobro, 'confirmacion');
+        $this->assertCount(1, $avisos);
+        $this->assertSame(0, (int)$avisos[0]['ok']);
+        $this->assertSame('mail', $avisos[0]['canal']);
+        $this->assertSame(0, (int)$avisos[0]['numero']);
+    }
+
+    public function test_el_despachador_manda_la_confirmacion_una_sola_vez(): void
+    {
+        $cobro = $this->cobro();
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
+        $this->notificar('555');
+
+        $this->assertSame(['enviados' => 1, 'fallidos' => 0], $this->despachar());
+        $this->assertSame(['enviados' => 0, 'fallidos' => 0], $this->despachar());
+
         $mails = $this->mailsDe('pago_confirmado');
         $this->assertCount(1, $mails);
+        $this->assertCount(1, $this->mails);
         $this->assertSame('acme@sol.com', $mails[0][1]);
         $this->assertSame('$85.000', $mails[0][2]['monto']);
         $avisos = $this->avisos($cobro, 'confirmacion');
         $this->assertCount(1, $avisos);
         $this->assertSame(1, (int)$avisos[0]['ok']);
+        $this->assertNotNull($avisos[0]['enviado_en']);
+    }
+
+    public function test_si_el_mail_falla_el_aviso_queda_pendiente_y_el_proximo_despacho_lo_reintenta(): void
+    {
+        $cobro = $this->cobro();
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
+        $this->notificar('555');
+        $this->mailOk = false;
+
+        $this->assertSame(['enviados' => 0, 'fallidos' => 1], $this->despachar());
+        $this->assertSame('pagado', $this->cobroDe($cobro)['estado'], 'que falle el mail no deshace el pago');
+        $this->assertSame(0, (int)$this->avisos($cobro, 'confirmacion')[0]['ok']);
+
+        $this->mailOk = true;
+        $this->assertSame(['enviados' => 1, 'fallidos' => 0], $this->despachar());
+        $this->assertSame(1, (int)$this->avisos($cobro, 'confirmacion')[0]['ok']);
+        $this->assertCount(2, $this->mailsDe('pago_confirmado'), 'dos intentos: el que falló y el que salió');
+    }
+
+    public function test_el_despachador_no_corre_si_otra_corrida_tiene_el_candado(): void
+    {
+        $cobro = $this->cobro();
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
+        $this->notificar('555');
+        // Otra conexión (otro proceso) tiene el candado.
+        $otra = new PDO(
+            'mysql:host=' . env('DB_HOST', 'localhost') . ';dbname=' . env('DB_NAME'),
+            (string)env('DB_USER'), (string)env('DB_PASS', '')
+        );
+        $this->assertSame('1', (string)$otra->query("SELECT GET_LOCK('avisos_pago_despacho', 0)")->fetchColumn());
+        try {
+            $this->assertSame(['enviados' => 0, 'fallidos' => 0], $this->despachar());
+            $this->assertSame([], $this->mails);
+        } finally {
+            $otra->query("SELECT RELEASE_LOCK('avisos_pago_despacho')");
+        }
+        $this->assertSame(['enviados' => 1, 'fallidos' => 0], $this->despachar());
+    }
+
+    public function test_un_cliente_sin_mail_deja_el_aviso_pendiente_y_cuenta_como_fallido(): void
+    {
+        $cobro = $this->cobro();
+        crud_update('clientes', $this->cliente, ['email' => null]);
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
+        $this->notificar('555');
+
+        $this->assertSame(['enviados' => 0, 'fallidos' => 1], $this->despachar());
+
+        $this->assertSame([], $this->mails);
+        $this->assertSame(0, (int)$this->avisos($cobro, 'confirmacion')[0]['ok']);
     }
 
     public function test_el_mismo_aviso_cinco_veces_paga_una_sola_vez_y_confirma_una_sola_vez(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $resultados = [];
         for ($i = 0; $i < 5; $i++) {
             $resultados[] = $this->notificar('555')['resultado'];
         }
+        $this->despachar();
 
         $this->assertSame(['pagado', 'ya_pagado', 'ya_pagado', 'ya_pagado', 'ya_pagado'], $resultados);
         $this->assertCount(1, $this->mailsDe('pago_confirmado'));
@@ -281,31 +353,29 @@ final class PagosMpTest extends DbTestCase
         $this->assertSame('555', $this->cobroDe($cobro)['mp_payment_id']);
         $this->assertSame(1, (int)q_val("SELECT COUNT(*) FROM cobros WHERE estado = 'pagado'"));
         $this->assertCount(5, $this->notificaciones());
+        $this->assertSame([0, 0, 0, 0, 0], array_map('intval', array_column($this->notificaciones(), 'sin_cobro')));
     }
 
-    public function test_si_la_confirmacion_no_salio_se_reintenta_cuando_llega_el_aviso_de_nuevo(): void
+    public function test_un_pago_que_ya_no_esta_aprobado_no_dispara_la_confirmacion(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
-        $this->mailOk = false;
-
-        $this->assertSame(200, $this->notificar('555')['http']);
-        $this->assertSame('pagado', $this->cobroDe($cobro)['estado'], 'que falle el mail no deshace el pago');
-        $this->assertSame(0, (int)$this->avisos($cobro, 'confirmacion')[0]['ok']);
-
-        $this->mailOk = true;
-        $this->assertSame('ya_pagado', $this->notificar('555')['resultado']);
-        $this->assertSame(1, (int)$this->avisos($cobro, 'confirmacion')[0]['ok']);
-
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
         $this->notificar('555');
-        $this->assertCount(2, $this->mailsDe('pago_confirmado'), 'dos intentos: el que falló y el que salió');
+        db()->exec('DELETE FROM avisos_pago');
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro, ['status' => 'refunded']));
+
+        $r = $this->notificar('555');
+
+        $this->assertSame('ya_pagado', $r['resultado']);
+        $this->assertSame([], $this->avisos($cobro, 'confirmacion'));
+        $this->assertSame('refunded', $this->notificaciones()[1]['estado_pago']);
     }
 
     public function test_pagar_no_mueve_fecha_proximo_cobro(): void
     {
         $susc = $this->debito('pre-1', '2026-11-05');
         $cobro = $this->cobroDeSuscripcion($susc, '2026-10', '85000.00', ['link_pago' => 'https://mp.test/pagar/1']);
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $this->notificar('555');
 
@@ -313,10 +383,10 @@ final class PagosMpTest extends DbTestCase
         $this->assertSame('2026-11-05', crud_find('suscripciones_cliente', $susc)['fecha_proximo_cobro']);
     }
 
-    public function test_un_cobro_ya_pagado_a_mano_no_se_toca_ni_se_confirma(): void
+    public function test_un_pago_sobre_un_cobro_ya_pagado_a_mano_no_se_toca_y_queda_a_la_vista(): void
     {
         $cobro = $this->cobro(['estado' => 'pagado', 'fecha_pago' => '2026-10-20', 'metodo_pago' => 'Transferencia']);
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $r = $this->notificar('555');
 
@@ -325,10 +395,43 @@ final class PagosMpTest extends DbTestCase
         $this->assertSame('Transferencia', $c['metodo_pago']);
         $this->assertSame('2026-10-20', $c['fecha_pago']);
         $this->assertNull($c['mp_payment_id']);
-        $this->assertSame([], $this->mails);
+        $this->assertSame([], $this->avisos($cobro, 'confirmacion'));
         $n = $this->notificaciones()[0];
         $this->assertSame($cobro, (int)$n['cobro_id']);
-        $this->assertStringContainsString('ya estaba pagado', (string)$n['error'], 'queda a la vista para revisar un posible cobro doble');
+        $this->assertSame(1, (int)$n['sin_cobro'], 'entra en la cola de pagos para revisar');
+        $this->assertStringContainsString('ya pagado', (string)$n['error']);
+        $this->assertStringContainsString('555', (string)$n['error']);
+    }
+
+    public function test_el_mismo_link_pagado_dos_veces_con_pagos_distintos_marca_el_segundo_para_revisar(): void
+    {
+        $cobro = $this->cobro();
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
+        $this->ofrecerPago($this->pagoMp('556', 'cobro-' . $cobro));
+
+        $this->assertSame('pagado', $this->notificar('555')['resultado']);
+        $this->assertSame('ya_pagado', $this->notificar('556')['resultado']);
+
+        $this->assertSame('555', $this->cobroDe($cobro)['mp_payment_id']);
+        $n = $this->notificaciones();
+        $this->assertSame(0, (int)$n[0]['sin_cobro']);
+        $this->assertNull($n[0]['error']);
+        $this->assertSame(1, (int)$n[1]['sin_cobro']);
+        $this->assertStringContainsString('revisá si hay que devolverlo', (string)$n[1]['error']);
+        $this->assertSame($cobro, (int)$n[1]['cobro_id']);
+        $this->assertCount(1, $this->avisos($cobro, 'confirmacion'));
+    }
+
+    public function test_repetir_el_pago_ya_registrado_no_es_un_error(): void
+    {
+        $cobro = $this->cobro();
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
+        $this->notificar('555');
+        $this->notificar('555');
+
+        $n = $this->notificaciones()[1];
+        $this->assertSame(0, (int)$n['sin_cobro']);
+        $this->assertNull($n['error']);
     }
 
     // ---- monto, moneda y cobros que no existen -----------------------------------------------------------------
@@ -336,7 +439,7 @@ final class PagosMpTest extends DbTestCase
     public function test_un_pago_con_monto_distinto_no_marca_pagado(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro, ['transaction_amount' => 1000]));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro, ['transaction_amount' => 1000]));
 
         $r = $this->notificar('555');
 
@@ -355,7 +458,7 @@ final class PagosMpTest extends DbTestCase
     public function test_un_pago_con_otra_moneda_no_marca_pagado(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro, ['currency_id' => 'USD']));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro, ['currency_id' => 'USD']));
 
         $r = $this->notificar('555');
 
@@ -369,9 +472,9 @@ final class PagosMpTest extends DbTestCase
     public function test_el_monto_se_compara_al_centavo(): void
     {
         $cobro = $this->cobro(['monto' => '85000.50']);
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro, ['transaction_amount' => 85000.5]));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro, ['transaction_amount' => 85000.5]));
         $otro = $this->cobro(['monto' => '85000.50']);
-        $this->ofrecerPago($this->pagoMp('556', (string)$otro, ['transaction_amount' => 85000.49]));
+        $this->ofrecerPago($this->pagoMp('556', 'cobro-' . $otro, ['transaction_amount' => 85000.49]));
 
         $this->assertSame('pagado', $this->notificar('555')['resultado']);
         $this->assertSame('monto_distinto', $this->notificar('556')['resultado']);
@@ -379,7 +482,7 @@ final class PagosMpTest extends DbTestCase
 
     public function test_un_pago_de_un_cobro_inexistente_queda_sin_cobro_asignado(): void
     {
-        $this->ofrecerPago($this->pagoMp('555', '987654'));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-987654'));
 
         $r = $this->notificar('555');
 
@@ -408,7 +511,7 @@ final class PagosMpTest extends DbTestCase
         $cobro = $this->cobro();
         foreach (['pending', 'in_process', 'rejected', 'cancelled'] as $i => $estado) {
             $id = (string)(600 + $i);
-            $this->ofrecerPago($this->pagoMp($id, (string)$cobro, ['status' => $estado]));
+            $this->ofrecerPago($this->pagoMp($id, 'cobro-' . $cobro, ['status' => $estado]));
 
             $r = $this->notificar($id);
 
@@ -426,23 +529,29 @@ final class PagosMpTest extends DbTestCase
         $this->assertSame([0, 0, 0, 0], array_map('intval', array_column($n, 'sin_cobro')));
     }
 
-    public function test_el_rechazo_de_un_debito_avisa_una_sola_vez_por_cobro(): void
+    public function test_el_rechazo_de_un_debito_registra_un_solo_aviso_por_cobro(): void
     {
         $susc = $this->debito();
         $cobro = $this->cobroDeSuscripcion($susc, '2026-10');
         foreach (['700', '701', '702'] as $id) {
-            $this->ofrecerPago($this->pagoMp($id, (string)$susc, ['status' => 'rejected', 'preapproval_id' => 'pre-1']));
+            $this->ofrecerPago($this->pagoMp($id, 'susc-' . $susc, ['status' => 'rejected', 'preapproval_id' => 'pre-1']));
             $this->assertSame('no_aprobado', $this->notificar($id)['resultado']);
         }
 
         $this->assertSame('pendiente', $this->cobroDe($cobro)['estado']);
+        $this->assertSame([], $this->mails, 'el webhook no manda mails');
+        $avisos = $this->avisos($cobro, 'rechazo');
+        $this->assertCount(1, $avisos);
+        $this->assertSame(0, (int)$avisos[0]['ok']);
+        $this->assertSame($cobro, (int)$this->notificaciones()[0]['cobro_id']);
+
+        $this->despachar();
+        $this->despachar();
+
         $mails = $this->mailsDe('debito_rechazado');
         $this->assertCount(1, $mails);
         $this->assertSame('acme@sol.com', $mails[0][1]);
-        $avisos = $this->avisos($cobro, 'rechazo');
-        $this->assertCount(1, $avisos);
-        $this->assertSame(1, (int)$avisos[0]['ok']);
-        $this->assertSame($cobro, (int)$this->notificaciones()[0]['cobro_id']);
+        $this->assertSame(1, (int)$this->avisos($cobro, 'rechazo')[0]['ok']);
     }
 
     // ---- débito ------------------------------------------------------------------------------------------------
@@ -455,7 +564,7 @@ final class PagosMpTest extends DbTestCase
         $viejo = $this->cobroDeSuscripcion($susc, '2026-10');
         $nuevo = $this->cobroDeSuscripcion($susc, '2026-11');
         // Con preapproval_id manda la suscripción, aunque la referencia externa coincida con el id de otro cobro.
-        $this->ofrecerPago($this->pagoMp('800', (string)$nuevo, ['preapproval_id' => 'pre-1']));
+        $this->ofrecerPago($this->pagoMp('800', 'cobro-' . $nuevo, ['preapproval_id' => 'pre-1']));
 
         $r = $this->notificar('800');
 
@@ -476,7 +585,7 @@ final class PagosMpTest extends DbTestCase
         $susc = $this->debito();
         $octubre = $this->cobroDeSuscripcion($susc, '2026-10');
         $noviembre = $this->cobroDeSuscripcion($susc, '2026-11');
-        $this->ofrecerPago($this->pagoMp('800', (string)$susc, ['preapproval_id' => 'pre-1']));
+        $this->ofrecerPago($this->pagoMp('800', 'susc-' . $susc, ['preapproval_id' => 'pre-1']));
 
         $this->assertSame('pagado', $this->notificar('800')['resultado']);
         $this->assertSame('ya_pagado', $this->notificar('800')['resultado']);
@@ -484,7 +593,8 @@ final class PagosMpTest extends DbTestCase
 
         $this->assertSame('pagado', $this->cobroDe($octubre)['estado']);
         $this->assertSame('pendiente', $this->cobroDe($noviembre)['estado']);
-        $this->assertCount(1, $this->mailsDe('pago_confirmado'));
+        $this->assertCount(1, $this->avisos($octubre, 'confirmacion'));
+        $this->assertSame([], $this->avisos($noviembre, 'confirmacion'));
         $this->assertSame($octubre, (int)$this->notificaciones()[2]['cobro_id']);
     }
 
@@ -493,8 +603,8 @@ final class PagosMpTest extends DbTestCase
         $susc = $this->debito();
         $octubre = $this->cobroDeSuscripcion($susc, '2026-10');
         $noviembre = $this->cobroDeSuscripcion($susc, '2026-11');
-        $this->ofrecerPago($this->pagoMp('800', (string)$susc, ['preapproval_id' => 'pre-1']));
-        $this->ofrecerPago($this->pagoMp('801', (string)$susc, ['preapproval_id' => 'pre-1']));
+        $this->ofrecerPago($this->pagoMp('800', 'susc-' . $susc, ['preapproval_id' => 'pre-1']));
+        $this->ofrecerPago($this->pagoMp('801', 'susc-' . $susc, ['preapproval_id' => 'pre-1']));
 
         $this->notificar('800');
         $this->notificar('801');
@@ -507,8 +617,8 @@ final class PagosMpTest extends DbTestCase
     {
         $susc = $this->debito();
         $cobro = $this->cobroDeSuscripcion($susc, '2026-10', '60000.00');
-        $this->ofrecerPago($this->pagoMp('800', (string)$susc, ['preapproval_id' => 'pre-1']));
-        $this->ofrecerPago($this->pagoMp('801', (string)$susc, ['preapproval_id' => 'pre-desconocida']));
+        $this->ofrecerPago($this->pagoMp('800', 'susc-' . $susc, ['preapproval_id' => 'pre-1']));
+        $this->ofrecerPago($this->pagoMp('801', 'susc-' . $susc, ['preapproval_id' => 'pre-desconocida']));
 
         $this->assertSame('sin_cobro', $this->notificar('800')['resultado']);
         $this->assertSame('sin_cobro', $this->notificar('801')['resultado']);
@@ -523,7 +633,7 @@ final class PagosMpTest extends DbTestCase
         $otra = $this->debito('pre-2', '2026-12-10');
         $deOtra = $this->cobroDeSuscripcion($otra, '2026-09');
         $deMia = $this->cobroDeSuscripcion($mia, '2026-10');
-        $this->ofrecerPago($this->pagoMp('800', (string)$mia, ['preapproval_id' => 'pre-1']));
+        $this->ofrecerPago($this->pagoMp('800', 'susc-' . $mia, ['preapproval_id' => 'pre-1']));
 
         $this->notificar('800');
 
@@ -540,7 +650,7 @@ final class PagosMpTest extends DbTestCase
             'payment' => ['id' => 800, 'status' => 'approved'],
         ];
         // el pago en sí no trae a qué suscripción pertenece: lo aporta el cobro recurrente
-        $this->ofrecerPago($this->pagoMp('800', (string)$susc));
+        $this->ofrecerPago($this->pagoMp('800', ''));
 
         $r = $this->notificar('900', 'subscription_authorized_payment');
 
@@ -566,6 +676,109 @@ final class PagosMpTest extends DbTestCase
         $this->assertSame('pendiente', $this->cobroDe($cobro)['estado']);
     }
 
+    // ---- referencias: nunca se cruza un pago con el cobro de otro cliente -------------------------------------------
+
+    public function test_un_pago_con_referencia_numerica_pelada_no_paga_el_cobro_de_otro_cliente(): void
+    {
+        $otroCliente = crud_insert('clientes', ['nombre' => 'Otro SA', 'email' => 'otro@sol.com']);
+        $ajeno = $this->cobro(['cliente_id' => $otroCliente]);
+        // un pago de débito de otra suscripción, sin campos de preapproval, cuya referencia es el id de ese cobro sin prefijo
+        $this->ofrecerPago($this->pagoMp('555', (string)$ajeno));
+
+        $r = $this->notificar('555');
+
+        $this->assertSame(['http' => 200, 'resultado' => 'sin_cobro'], $r);
+        $c = $this->cobroDe($ajeno);
+        $this->assertSame('pendiente', $c['estado']);
+        $this->assertNull($c['mp_payment_id']);
+        $n = $this->notificaciones()[0];
+        $this->assertSame(1, (int)$n['sin_cobro']);
+        $this->assertNull($n['cobro_id']);
+        $this->assertNotSame('', (string)$n['error']);
+        $this->assertSame([], $this->avisos($ajeno, 'confirmacion'));
+    }
+
+    public function test_un_pago_susc_n_sin_campos_de_preapproval_va_al_cobro_mas_antiguo_de_esa_suscripcion_y_nunca_al_cobro_n(): void
+    {
+        $susc = $this->debito();
+        $otroCliente = crud_insert('clientes', ['nombre' => 'Otro SA', 'email' => 'otro@sol.com']);
+        // un cobro ajeno, del mismo monto, cuyo id es justo el de la suscripción
+        $ajeno = $this->cobro(['id' => $susc, 'cliente_id' => $otroCliente]);
+        $this->assertSame($susc, $ajeno);
+        $mio = $this->cobroDeSuscripcion($susc, '2026-10');
+        $siguiente = $this->cobroDeSuscripcion($susc, '2026-11');
+        $this->ofrecerPago($this->pagoMp('556', 'susc-' . $susc));
+
+        $r = $this->notificar('556');
+
+        $this->assertSame('pagado', $r['resultado']);
+        $this->assertSame('556', $this->cobroDe($mio)['mp_payment_id']);
+        $this->assertSame('Mercado Pago · débito', $this->cobroDe($mio)['metodo_pago']);
+        $this->assertSame('pendiente', $this->cobroDe($siguiente)['estado']);
+        $this->assertSame('pendiente', $this->cobroDe($ajeno)['estado']);
+    }
+
+    public function test_un_pago_de_una_suscripcion_que_no_existe_queda_sin_cobro(): void
+    {
+        $this->cobro();
+        $this->ofrecerPago($this->pagoMp('555', 'susc-999999'));
+
+        $this->assertSame('sin_cobro', $this->notificar('555')['resultado']);
+    }
+    public function test_un_pago_con_referencia_de_cobro_sin_preferencia_nuestra_no_se_asigna(): void
+    {
+        $cobro = $this->cobro(['mp_preference_id' => null]);
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
+
+        $this->assertSame('sin_cobro', $this->notificar('555')['resultado']);
+        $this->assertSame('pendiente', $this->cobroDe($cobro)['estado']);
+    }
+
+    public function test_el_preapproval_del_pago_manda_sobre_la_referencia(): void
+    {
+        $mia = $this->debito('pre-1');
+        $otra = $this->debito('pre-2', '2026-12-10');
+        $deOtra = $this->cobroDeSuscripcion($otra, '2026-10');
+        $deMia = $this->cobroDeSuscripcion($mia, '2026-10');
+        $this->ofrecerPago($this->pagoMp('555', 'susc-' . $otra, ['preapproval_id' => 'pre-1']));
+
+        $this->notificar('555');
+
+        $this->assertSame('pagado', $this->cobroDe($deMia)['estado']);
+        $this->assertSame('pendiente', $this->cobroDe($deOtra)['estado']);
+    }
+
+    public function test_dos_pagos_de_debito_con_referencia_de_suscripcion_van_a_meses_consecutivos(): void
+    {
+        $susc = $this->debito();
+        $octubre = $this->cobroDeSuscripcion($susc, '2026-10');
+        $noviembre = $this->cobroDeSuscripcion($susc, '2026-11');
+        $diciembre = $this->cobroDeSuscripcion($susc, '2026-12');
+        $this->ofrecerPago($this->pagoMp('800', 'susc-' . $susc));
+        $this->ofrecerPago($this->pagoMp('801', 'susc-' . $susc));
+
+        $this->assertSame('pagado', $this->notificar('800')['resultado']);
+        $this->assertSame('pagado', $this->notificar('801')['resultado']);
+        $this->assertSame('ya_pagado', $this->notificar('800')['resultado']);
+
+        $this->assertSame('800', $this->cobroDe($octubre)['mp_payment_id']);
+        $this->assertSame('801', $this->cobroDe($noviembre)['mp_payment_id']);
+        $this->assertSame('pendiente', $this->cobroDe($diciembre)['estado']);
+        $this->assertSame([0, 0, 0], array_map('intval', array_column($this->notificaciones(), 'sin_cobro')));
+    }
+
+    public function test_un_debito_cuyos_cobros_ya_estan_pagados_queda_para_revisar(): void
+    {
+        $susc = $this->debito();
+        $this->cobroDeSuscripcion($susc, '2026-10', '85000.00', ['estado' => 'pagado', 'fecha_pago' => '2026-10-02']);
+        $this->ofrecerPago($this->pagoMp('800', 'susc-' . $susc));
+
+        $r = $this->notificar('800');
+
+        $this->assertSame('sin_cobro', $r['resultado']);
+        $this->assertSame(1, (int)$this->notificaciones()[0]['sin_cobro']);
+    }
+
     // ---- Mercado Pago caído ------------------------------------------------------------------------------------
 
     public function test_si_mercado_pago_no_responde_se_devuelve_500_y_se_registra_el_error(): void
@@ -584,7 +797,7 @@ final class PagosMpTest extends DbTestCase
         $this->assertSame([], $this->mails);
 
         // el reintento de Mercado Pago, ya con la API arriba, termina el trabajo
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
         $this->assertSame(200, $this->notificar('555')['http']);
         $this->assertSame('pagado', $this->cobroDe($cobro)['estado']);
     }
@@ -603,7 +816,7 @@ final class PagosMpTest extends DbTestCase
     {
         $susc = $this->debito('pre-1');
         crud_update('suscripciones_cliente', $susc, ['modalidad' => 'link', 'mp_preapproval_estado' => 'pendiente']);
-        $this->mp['/preapproval/pre-1'] = ['id' => 'pre-1', 'status' => 'authorized', 'external_reference' => (string)$susc];
+        $this->mp['/preapproval/pre-1'] = ['id' => 'pre-1', 'status' => 'authorized', 'external_reference' => 'susc-' . $susc];
 
         $r = $this->notificar('pre-1', 'subscription_preapproval');
 
@@ -693,7 +906,7 @@ final class PagosMpTest extends DbTestCase
     public function test_el_tipo_tambien_puede_venir_como_topic_o_en_el_cuerpo(): void
     {
         $cobro = $this->cobro();
-        $this->ofrecerPago($this->pagoMp('555', (string)$cobro));
+        $this->ofrecerPago($this->pagoMp('555', 'cobro-' . $cobro));
 
         $r = mp_webhook_procesar($this->firmar('555'), ['data_id' => '555'], json_encode(['type' => 'payment', 'data' => ['id' => '555']]));
 
@@ -703,11 +916,11 @@ final class PagosMpTest extends DbTestCase
     public function test_cobro_registrar_pago_mp_devuelve_cada_resultado(): void
     {
         $cobro = $this->cobro();
-        $base = ['id' => '1', 'status' => 'approved', 'monto' => 85000.0, 'moneda' => 'ARS', 'referencia_externa' => (string)$cobro, 'preapproval_id' => ''];
+        $base = ['id' => '1', 'status' => 'approved', 'monto' => 85000.0, 'moneda' => 'ARS', 'referencia_externa' => 'cobro-' . $cobro, 'preapproval_id' => ''];
 
         $this->assertSame('no_aprobado', cobro_registrar_pago_mp(['status' => 'pending'] + $base));
         $this->assertSame('monto_distinto', cobro_registrar_pago_mp(['monto' => 1.0] + $base));
-        $this->assertSame('sin_cobro', cobro_registrar_pago_mp(['referencia_externa' => '99999'] + $base));
+        $this->assertSame('sin_cobro', cobro_registrar_pago_mp(['referencia_externa' => 'cobro-99999'] + $base));
         $this->assertSame('pagado', cobro_registrar_pago_mp($base));
         $this->assertSame('ya_pagado', cobro_registrar_pago_mp($base));
     }
@@ -719,10 +932,12 @@ final class PagosMpTest extends DbTestCase
         $suelto = $this->cobro();
         $base = ['id' => '1', 'status' => 'approved', 'monto' => 85000.0, 'moneda' => 'ARS', 'referencia_externa' => '', 'preapproval_id' => ''];
 
-        $this->assertSame($suelto, (int)cobro_de_pago_mp(['referencia_externa' => (string)$suelto] + $base)['id']);
+        $this->assertSame($suelto, (int)cobro_de_pago_mp(['referencia_externa' => 'cobro-' . $suelto] + $base)['id']);
         $this->assertSame($deSusc, (int)cobro_de_pago_mp(['preapproval_id' => 'pre-1'] + $base)['id']);
         $this->assertNull(cobro_de_pago_mp($base));
         $this->assertNull(cobro_de_pago_mp(['referencia_externa' => 'abc'] + $base));
+        $this->assertNull(cobro_de_pago_mp(['referencia_externa' => (string)$suelto] + $base), 'una referencia numérica pelada no se reconoce');
+        $this->assertSame($deSusc, (int)cobro_de_pago_mp(['referencia_externa' => 'susc-' . $susc] + $base)['id']);
     }
 
     public function test_el_mapper_lee_los_campos_de_un_pago_de_mercado_pago(): void

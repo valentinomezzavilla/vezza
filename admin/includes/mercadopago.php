@@ -78,6 +78,9 @@ function mp_id_y_link(array $r, string $que): array
  * Crea una preferencia de Checkout Pro para un cobro suelto (un pago único).
  * POST /checkout/preferences. $cobro: id, concepto, monto (moneda siempre ARS).
  *
+ * La referencia externa lleva prefijo ('cobro-{id}'): los ids de cobros y de suscripciones son números de secuencias
+ * independientes y sin prefijo un pago de una suscripción se confundiría con un cobro ajeno.
+ *
  * Campos enviados: items[].title, items[].quantity, items[].unit_price (CONFIRMADO: title/quantity/unit_price en los
  * ejemplos de "Crear preferencia"; items[].currency_id CONFIRMADO solo como currencyId en los ejemplos de SDK),
  * payer.email, external_reference, notification_url, back_urls.{success,pending,failure}, auto_return='approved'
@@ -98,7 +101,7 @@ function mp_crear_preferencia(array $cobro, string $emailCliente): array
             'currency_id' => 'ARS',
         ]],
         'payer' => ['email' => $emailCliente],
-        'external_reference' => (string)$cobro['id'],
+        'external_reference' => 'cobro-' . $cobro['id'],
         'notification_url' => portal_url('/api/mp-webhook'),
         'back_urls' => ['success' => $pagos, 'pending' => $pagos, 'failure' => $pagos],
         'auto_return' => 'approved',
@@ -164,7 +167,7 @@ function mp_crear_preapproval(array $suscripcion, string $emailCliente, string $
 {
     $r = mp_request('POST', '/preapproval', [
         'reason' => (string)($suscripcion['plan_nombre'] ?? '') !== '' ? (string)$suscripcion['plan_nombre'] : 'Suscripción VEZZA',
-        'external_reference' => (string)$suscripcion['id'],
+        'external_reference' => 'susc-' . $suscripcion['id'],
         'payer_email' => $emailCliente,
         'back_url' => portal_url('/clientes/pagos'),
         'status' => 'pending',

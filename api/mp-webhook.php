@@ -27,4 +27,16 @@ try {
 } catch (Throwable $e) {
     error_log('[mp-webhook] ' . $e);
     json_out(500, ['resultado' => 'error']);
+    return;
+}
+
+// Los mails de confirmación o rechazo salen después de contestarle a Mercado Pago (el SMTP tarda ~10 s y un reintento
+// de Mercado Pago no tiene que esperar ni duplicarlos).
+if ($r['http'] === 200) {
+    responder_y_seguir();
+    try {
+        avisos_despachar_inmediatos();
+    } catch (Throwable $e) {
+        error_log('[mp-webhook] No se pudieron despachar los avisos: ' . $e);
+    }
 }

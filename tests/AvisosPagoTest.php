@@ -83,63 +83,29 @@ final class AvisosPagoTest extends DbTestCase
         $this->assertSame('', $datos['link_pago']);
     }
 
-    public function test_registra_la_fila_antes_de_enviar_y_la_pasa_a_ok(): void
+    public function test_aviso_registrar_crea_una_fila_pendiente_por_mail(): void
     {
         $c = $this->cobro();
-        $visto = null;
-        Mail::$transporte = function (string $url, string $secreto, array $payload) use ($c, &$visto): bool {
-            $visto = $this->filas($c['id']);
-            return true;
-        };
 
-        $this->assertTrue(aviso_registrar_y_enviar_mail($c['id'], 'confirmacion', 0, 'pago_confirmado', $c));
+        aviso_registrar($c['id'], 'confirmacion', 0);
 
-        $this->assertCount(1, $visto, 'la fila tiene que existir antes de mandar el mail');
-        $this->assertSame(0, (int)$visto[0]['ok']);
         $filas = $this->filas($c['id']);
         $this->assertCount(1, $filas);
         $this->assertSame('confirmacion', $filas[0]['tipo']);
         $this->assertSame('mail', $filas[0]['canal']);
         $this->assertSame(0, (int)$filas[0]['numero']);
-        $this->assertSame(1, (int)$filas[0]['ok']);
-        $this->assertNotNull($filas[0]['enviado_en']);
-    }
-
-    public function test_manda_la_plantilla_al_mail_del_cliente_con_los_datos_del_cobro(): void
-    {
-        $c = $this->cobro();
-
-        aviso_registrar_y_enviar_mail($c['id'], 'confirmacion', 0, 'pago_confirmado', $c);
-
-        $this->assertSame([['pago_confirmado', 'acme@sol.com', aviso_datos_cobro($c)]], $this->mails);
-    }
-
-    public function test_si_ya_se_envio_no_lo_manda_de_nuevo(): void
-    {
-        $c = $this->cobro();
-
-        $this->assertTrue(aviso_registrar_y_enviar_mail($c['id'], 'confirmacion', 0, 'pago_confirmado', $c));
-        $this->assertTrue(aviso_registrar_y_enviar_mail($c['id'], 'confirmacion', 0, 'pago_confirmado', $c));
-
-        $this->assertCount(1, $this->mails);
-        $this->assertCount(1, $this->filas($c['id']));
-    }
-
-    public function test_si_el_mail_falla_la_fila_queda_en_cero_y_se_reintenta(): void
-    {
-        $c = $this->cobro();
-        $this->mailOk = false;
-
-        $this->assertFalse(aviso_registrar_y_enviar_mail($c['id'], 'rechazo', 0, 'debito_rechazado', $c));
-
-        $filas = $this->filas($c['id']);
-        $this->assertCount(1, $filas);
         $this->assertSame(0, (int)$filas[0]['ok']);
+        $this->assertSame([], $this->mails, 'registrar no manda nada');
+    }
 
-        $this->mailOk = true;
-        $this->assertTrue(aviso_registrar_y_enviar_mail($c['id'], 'rechazo', 0, 'debito_rechazado', $c));
+    public function test_aviso_registrar_no_toca_una_fila_existente(): void
+    {
+        $c = $this->cobro();
+        aviso_registrar($c['id'], 'confirmacion', 0);
+        db()->exec('UPDATE avisos_pago SET ok = 1');
 
-        $this->assertCount(2, $this->mails);
+        aviso_registrar($c['id'], 'confirmacion', 0);
+
         $filas = $this->filas($c['id']);
         $this->assertCount(1, $filas);
         $this->assertSame(1, (int)$filas[0]['ok']);
@@ -149,21 +115,87 @@ final class AvisosPagoTest extends DbTestCase
     {
         $c = $this->cobro();
 
-        aviso_registrar_y_enviar_mail($c['id'], 'vencido', 1, 'pago_vencido', $c);
-        aviso_registrar_y_enviar_mail($c['id'], 'vencido', 2, 'pago_vencido', $c);
-        aviso_registrar_y_enviar_mail($c['id'], 'confirmacion', 0, 'pago_confirmado', $c);
+        aviso_registrar($c['id'], 'vencido', 1);
+        aviso_registrar($c['id'], 'vencido', 2);
+        aviso_registrar($c['id'], 'confirmacion', 0);
 
-        $this->assertCount(3, $this->mails);
         $this->assertCount(3, $this->filas($c['id']));
     }
 
-    public function test_un_cliente_sin_mail_no_recibe_nada_y_no_deja_fila(): void
+    public function test_el_despachador_manda_la_plantilla_de_cada_tipo_al_mail_del_cliente(): void
+    {
+        $c = $this->cobro();
+        aviso_registrar($c['id'], 'confirmacion', 0);
+        aviso_registrar($c['id'], 'rechazo', 0);
+
+        $this->assertSame(['enviados' => 2, 'fallidos' => 0], avisos_despachar_inmediatos());
+
+        $this->assertSame([
+            ['pago_confirmado', 'acme@sol.com', aviso_datos_cobro($c)],
+            ['debito_rechazado', 'acme@sol.com', aviso_datos_cobro($c)],
+        ], $this->mails);
+        foreach ($this->filas($c['id']) as $fila) {
+            $this->assertSame(1, (int)$fila['ok']);
+            $this->assertNotNull($fila['enviado_en']);
+        }
+    }
+
+    public function test_el_despachador_no_manda_dos_veces_lo_ya_enviado(): void
+    {
+        $c = $this->cobro();
+        aviso_registrar($c['id'], 'confirmacion', 0);
+
+        avisos_despachar_inmediatos();
+        $segunda = avisos_despachar_inmediatos();
+
+        $this->assertSame(['enviados' => 0, 'fallidos' => 0], $segunda);
+        $this->assertCount(1, $this->mails);
+    }
+
+    public function test_si_el_mail_falla_queda_en_cero_y_se_reintenta(): void
+    {
+        $c = $this->cobro();
+        aviso_registrar($c['id'], 'rechazo', 0);
+        $this->mailOk = false;
+
+        $this->assertSame(['enviados' => 0, 'fallidos' => 1], avisos_despachar_inmediatos());
+        $this->assertSame(0, (int)$this->filas($c['id'])[0]['ok']);
+
+        $this->mailOk = true;
+        $this->assertSame(['enviados' => 1, 'fallidos' => 0], avisos_despachar_inmediatos());
+        $this->assertSame(1, (int)$this->filas($c['id'])[0]['ok']);
+        $this->assertCount(2, $this->mails);
+    }
+
+    public function test_un_cliente_sin_mail_queda_pendiente_y_cuenta_como_fallido(): void
     {
         $c = $this->cobro([], null);
+        aviso_registrar($c['id'], 'confirmacion', 0);
 
-        $this->assertFalse(aviso_registrar_y_enviar_mail($c['id'], 'confirmacion', 0, 'pago_confirmado', $c));
+        $this->assertSame(['enviados' => 0, 'fallidos' => 1], avisos_despachar_inmediatos());
 
         $this->assertSame([], $this->mails);
-        $this->assertSame([], $this->filas($c['id']));
+        $this->assertSame(0, (int)$this->filas($c['id'])[0]['ok']);
+    }
+
+    public function test_el_despachador_solo_toma_confirmacion_y_rechazo(): void
+    {
+        $c = $this->cobro();
+        aviso_registrar($c['id'], 'previo', 0);
+        aviso_registrar($c['id'], 'vencido', 1);
+
+        $this->assertSame(['enviados' => 0, 'fallidos' => 0], avisos_despachar_inmediatos());
+
+        $this->assertSame([], $this->mails);
+    }
+
+    public function test_el_despachador_libera_el_candado_al_terminar(): void
+    {
+        $c = $this->cobro();
+        aviso_registrar($c['id'], 'confirmacion', 0);
+
+        avisos_despachar_inmediatos();
+
+        $this->assertSame('1', (string)q_val("SELECT IS_FREE_LOCK('avisos_pago_despacho')"));
     }
 }

@@ -9,9 +9,6 @@ declare(strict_types=1);
  * cobros.mp_payment_id (único) y de tomar el cobro con SELECT ... FOR UPDATE dentro de una transacción.
  */
 
-/** Cuánto puede distanciarse el ts de la firma de la hora actual (segundos). */
-const MP_FIRMA_TOLERANCIA_SEG = 300;
-
 /** La consulta a Mercado Pago falló (red, token, respuesta rara): el webhook responde 500 para que reintente. */
 final class MpConsultaFallida extends RuntimeException
 {
@@ -96,7 +93,7 @@ function mp_webhook_procesar(array $headers, array $query, string $cuerpoCrudo):
         ''
     );
     $dataId = $dato('data.id', 'data_id');
-    if (!mp_firma_valida($headers, $dataId, (string)env('MP_WEBHOOK_SECRET', ''), MP_FIRMA_TOLERANCIA_SEG)) {
+    if (!mp_firma_valida($headers, $dataId, (string)env('MP_WEBHOOK_SECRET', ''))) {
         return ['http' => 401, 'resultado' => 'firma_invalida'];
     }
     if ($dataId === '') {
@@ -194,30 +191,64 @@ function mp_centavos(string|float|null $monto): ?int
     return $monto === null ? null : (int)round((float)$monto * 100);
 }
 
+/** Máximo de cobros que se prueban para un pago de débito cuando el elegido resultó ya pagado por otro pago. */
+const MP_MAX_REINTENTOS_COBRO = 5;
+
 /**
- * Busca el cobro al que corresponde un pago ya normalizado (mp_pago_normalizar). Un pago con preapproval_id es de
- * débito: va al cobro pendiente más antiguo de esa suscripción cuyo monto coincida (su referencia externa es la
- * suscripción, no un cobro). Los demás son pagos por link y llevan el id del cobro como referencia externa.
+ * Las referencias externas que armamos llevan prefijo: 'cobro-{id}' (preferencia de un cobro) y 'susc-{id}' (suscripción
+ * con débito). Sin prefijo los ids de las dos tablas se confundirían entre sí; lo que no tenga prefijo no se reconoce.
+ *
+ * @return array{0: string, 1: int}|null [tipo, id]
  */
-function cobro_de_pago_mp(array $pago): ?array
+function mp_referencia_interpretar(string $ref): ?array
 {
-    if ($pago['preapproval_id'] !== '') {
+    return preg_match('/^(cobro|susc)-(\d{1,10})$/', $ref, $m) ? [$m[1], (int)$m[2]] : null;
+}
+
+/** Un pago es de débito si trae el preapproval de su suscripción o su referencia es de suscripción. */
+function mp_pago_es_debito(array $pago): bool
+{
+    return $pago['preapproval_id'] !== '' || (mp_referencia_interpretar($pago['referencia_externa'])[0] ?? '') === 'susc';
+}
+
+/**
+ * Busca el cobro al que corresponde un pago ya normalizado (mp_pago_normalizar), sin adivinar:
+ * - con preapproval_id (o referencia 'susc-N') es de débito: el cobro pendiente más antiguo de esa suscripción cuyo monto
+ *   coincida (el preapproval del pago manda sobre la referencia);
+ * - con referencia 'cobro-N' es un pago por link: el cobro N, solo si tiene una preferencia nuestra (mp_preference_id);
+ * - cualquier otra cosa (incluida una referencia numérica pelada) no se asigna a nada.
+ * $excluir son ids de cobro que no se consideran (débito); $bloquear toma la fila con FOR UPDATE (dentro de una transacción).
+ *
+ * @param list<int> $excluir
+ */
+function cobro_de_pago_mp(array $pago, array $excluir = [], bool $bloquear = false): ?array
+{
+    $ref = mp_referencia_interpretar($pago['referencia_externa']);
+    if ($pago['preapproval_id'] !== '' || ($ref[0] ?? '') === 'susc') {
         if ($pago['monto'] === null) {
             return null;
         }
+        if ($pago['preapproval_id'] !== '') {
+            $donde = 'sc.mp_preapproval_id = ?';
+            $params = [$pago['preapproval_id']];
+        } else {
+            $donde = 'sc.id = ?';
+            $params = [$ref[1]];
+        }
+        $params[] = number_format($pago['monto'], 2, '.', '');
+        $noExcluidos = $excluir ? ' AND c.id NOT IN (' . implode(',', array_map('intval', $excluir)) . ')' : '';
         return q_one(
             "SELECT c.* FROM cobros c
              JOIN suscripciones_cliente sc ON sc.id = c.suscripcion_cliente_id
-             WHERE sc.mp_preapproval_id = ? AND c.estado = 'pendiente' AND c.monto = ?
-             ORDER BY c.fecha_vencimiento, c.id LIMIT 1",
-            [$pago['preapproval_id'], number_format($pago['monto'], 2, '.', '')]
+             WHERE $donde AND c.estado = 'pendiente' AND c.monto = ?$noExcluidos
+             ORDER BY c.fecha_vencimiento, c.id LIMIT 1" . ($bloquear ? ' FOR UPDATE' : ''),
+            $params
         );
     }
-    $ref = $pago['referencia_externa'];
-    if ($ref === '' || !ctype_digit($ref) || strlen($ref) > 10) {
-        return null;
+    if ($ref !== null && $ref[0] === 'cobro') {
+        return q_one('SELECT * FROM cobros WHERE id = ? AND mp_preference_id IS NOT NULL', [$ref[1]]);
     }
-    return q_one('SELECT * FROM cobros WHERE id = ?', [(int)$ref]);
+    return null;
 }
 
 /**
@@ -231,62 +262,75 @@ function cobro_registrar_pago_mp(array $pago): string
 
 /**
  * Como cobro_registrar_pago_mp, y además devuelve lo que se anota en la notificación: cobro_id, estado_pago (el status
- * del pago en Mercado Pago), sin_cobro y error.
+ * del pago en Mercado Pago), sin_cobro y error. No manda mails: deja el aviso (confirmación o rechazo) registrado en
+ * avisos_pago con ok = 0, en la misma transacción, y lo despacha avisos_despachar_inmediatos() fuera del request.
  *
  * @return array{resultado: string, cobro_id: ?int, estado_pago: string, sin_cobro: bool, error: ?string}
  */
 function cobro_registrar_pago_mp_detalle(array $pago): array
 {
-    [$resultado, $cobro, $error] = tx(function () use ($pago): array {
+    $aprobado = $pago['status'] === 'approved';
+    [$resultado, $cobro, $error, $sinCobro] = tx(function () use ($pago, $aprobado): array {
+        $sinCobro = fn(?array $cobro, string $error): array => ['sin_cobro', $cobro, $error, true];
         // Un pago ya registrado no se vuelve a asignar: si no, el aviso repetido de un débito pagaría el cobro del mes siguiente.
         $registrado = q_one('SELECT * FROM cobros WHERE mp_payment_id = ?', [$pago['id']]);
         if ($registrado !== null) {
-            return ['ya_pagado', $registrado, null];
+            if ($aprobado) {
+                aviso_registrar((int)$registrado['id'], 'confirmacion', 0);
+            }
+            return ['ya_pagado', $registrado, null, false];
         }
-        $encontrado = cobro_de_pago_mp($pago);
-        if ($encontrado === null) {
-            return ['sin_cobro', null, 'No se encontró el cobro del pago ' . $pago['id']];
+        $excluir = [];
+        for ($intento = 0; $intento < MP_MAX_REINTENTOS_COBRO; $intento++) {
+            $encontrado = cobro_de_pago_mp($pago, $excluir, $aprobado);
+            if ($encontrado === null) {
+                return $sinCobro(null, 'No se encontró el cobro del pago ' . $pago['id'] . ' (referencia "' . mb_substr($pago['referencia_externa'], 0, 60) . '")');
+            }
+            if (!$aprobado) {
+                if ($pago['status'] === 'rejected' && mp_pago_es_debito($pago)) {
+                    aviso_registrar((int)$encontrado['id'], 'rechazo', 0);
+                }
+                return ['no_aprobado', $encontrado, null, false];
+            }
+            $cobro = q_one('SELECT * FROM cobros WHERE id = ? FOR UPDATE', [(int)$encontrado['id']]);
+            if ($cobro === null) {
+                return $sinCobro(null, 'No se encontró el cobro del pago ' . $pago['id']);
+            }
+            if ($cobro['estado'] === 'pagado') {
+                if ($cobro['mp_payment_id'] === $pago['id']) {
+                    aviso_registrar((int)$cobro['id'], 'confirmacion', 0);
+                    return ['ya_pagado', $cobro, null, false];
+                }
+                if (mp_pago_es_debito($pago)) {
+                    $excluir[] = (int)$cobro['id'];
+                    continue;
+                }
+                return ['ya_pagado', $cobro, "Pago {$pago['id']} recibido sobre un cobro ya pagado: revisá si hay que devolverlo", true];
+            }
+            if (mp_centavos($cobro['monto']) !== mp_centavos($pago['monto']) || strtoupper((string)$cobro['moneda']) !== $pago['moneda']) {
+                return ['monto_distinto', $cobro, sprintf(
+                    'El monto o la moneda del pago %s (%s %s) no coincide con el cobro (%s %s): no se marcó como pagado',
+                    $pago['id'], $pago['monto'] === null ? '?' : number_format($pago['monto'], 2, '.', ''), $pago['moneda'] ?: '?',
+                    $cobro['monto'], $cobro['moneda']
+                ), true];
+            }
+            crud_update('cobros', (int)$cobro['id'], [
+                'estado' => 'pagado',
+                'fecha_pago' => hoy(),
+                'metodo_pago' => mp_pago_es_debito($pago) ? 'Mercado Pago · débito' : 'Mercado Pago · link',
+                'mp_payment_id' => $pago['id'],
+            ]);
+            aviso_registrar((int)$cobro['id'], 'confirmacion', 0);
+            return ['pagado', crud_find('cobros', (int)$cobro['id']), null, false];
         }
-        if ($pago['status'] !== 'approved') {
-            return ['no_aprobado', $encontrado, null];
-        }
-        $cobro = q_one('SELECT * FROM cobros WHERE id = ? FOR UPDATE', [(int)$encontrado['id']]);
-        if ($cobro === null) {
-            return ['sin_cobro', null, 'No se encontró el cobro del pago ' . $pago['id']];
-        }
-        if ($cobro['estado'] === 'pagado') {
-            return ['ya_pagado', $cobro, 'El cobro ya estaba pagado con otro medio o pago: revisá si el pago ' . $pago['id'] . ' hay que devolverlo'];
-        }
-        if (mp_centavos($cobro['monto']) !== mp_centavos($pago['monto']) || strtoupper((string)$cobro['moneda']) !== $pago['moneda']) {
-            return ['monto_distinto', $cobro, sprintf(
-                'El monto o la moneda del pago %s (%s %s) no coincide con el cobro (%s %s): no se marcó como pagado',
-                $pago['id'], $pago['monto'] === null ? '?' : number_format($pago['monto'], 2, '.', ''), $pago['moneda'] ?: '?',
-                $cobro['monto'], $cobro['moneda']
-            )];
-        }
-        crud_update('cobros', (int)$cobro['id'], [
-            'estado' => 'pagado',
-            'fecha_pago' => hoy(),
-            'metodo_pago' => $pago['preapproval_id'] !== '' ? 'Mercado Pago · débito' : 'Mercado Pago · link',
-            'mp_payment_id' => $pago['id'],
-        ]);
-        return ['pagado', crud_find('cobros', (int)$cobro['id']), null];
+        return $sinCobro(null, 'No hay un cobro pendiente libre para el pago ' . $pago['id']);
     });
-
-    if ($cobro !== null) {
-        if ($resultado === 'pagado' || ($resultado === 'ya_pagado' && $cobro['mp_payment_id'] === $pago['id'])) {
-            // También en 'ya_pagado' de este mismo pago: si el mail falló la primera vez se reintenta; si ya salió, no hace nada.
-            aviso_registrar_y_enviar_mail((int)$cobro['id'], 'confirmacion', 0, 'pago_confirmado', $cobro);
-        } elseif ($resultado === 'no_aprobado' && $pago['status'] === 'rejected' && $pago['preapproval_id'] !== '') {
-            aviso_registrar_y_enviar_mail((int)$cobro['id'], 'rechazo', 0, 'debito_rechazado', $cobro);
-        }
-    }
 
     return [
         'resultado' => $resultado,
         'cobro_id' => $cobro === null ? null : (int)$cobro['id'],
         'estado_pago' => $pago['status'],
-        'sin_cobro' => in_array($resultado, ['sin_cobro', 'monto_distinto'], true),
+        'sin_cobro' => $sinCobro,
         'error' => $error,
     ];
 }

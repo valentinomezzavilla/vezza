@@ -1,6 +1,9 @@
 <?php
 declare(strict_types=1);
 
+/** Qué plantilla de mail lleva cada aviso que sale apenas se registra (los que no dependen de un calendario). */
+const AVISOS_PLANTILLA_INMEDIATA = ['confirmacion' => 'pago_confirmado', 'rechazo' => 'debito_rechazado'];
+
 /** "$85.000" (con centavos, "$85.000,50", solo cuando no son cero). */
 function monto_formato_ar(string|float $monto): string
 {
@@ -31,30 +34,50 @@ function aviso_datos_cobro(array $cobro): array
 }
 
 /**
- * Manda un aviso por mail al cliente del cobro y deja registro en avisos_pago. La fila se inserta primero con ok = 0
- * (la clave única (cobro, tipo, canal, numero) es el reclamo: si ya existe con ok = 1 no se manda de nuevo; con ok = 0
- * se reintenta) y pasa a ok = 1 recién cuando el mail salió. Devuelve si el aviso quedó enviado.
- * Un cliente sin mail no deja fila: cuando lo cargue, el próximo intento lo manda.
+ * Anota un aviso de mail pendiente de enviar (ok = 0). La clave única (cobro, tipo, canal, numero) hace de reclamo: si
+ * la fila ya existe, sea cual sea su estado, no se toca. Es seguro llamarlo dentro de la transacción que provoca el aviso.
  */
-function aviso_registrar_y_enviar_mail(int $cobroId, string $tipo, int $numero, string $plantilla, array $cobro): bool
+function aviso_registrar(int $cobroId, string $tipo, int $numero): void
 {
-    $email = trim((string)q_val('SELECT email FROM clientes WHERE id = ?', [(int)$cobro['cliente_id']]));
-    if ($email === '') {
-        error_log("[avisos] El cliente del cobro $cobroId no tiene mail: no se mandó el aviso $tipo");
-        return false;
+    db()->prepare("INSERT IGNORE INTO avisos_pago (cobro_id, tipo, canal, numero, ok) VALUES (?, ?, 'mail', ?, 0)")
+        ->execute([$cobroId, $tipo, $numero]);
+}
+
+/**
+ * Manda por mail los avisos de confirmación y de rechazo que quedaron registrados sin enviar (ok = 0) y los pasa a
+ * ok = 1 con su enviado_en. Se corre después de responderle a Mercado Pago, no dentro del request: el SMTP tarda ~10 s.
+ * Un candado de la base (GET_LOCK) evita que dos corridas a la vez manden el mismo mail; si otra lo tiene, no hace nada.
+ * Lo que falla (mail caído, cliente sin mail) queda en ok = 0 y se cuenta en `fallidos`: la próxima corrida lo reintenta.
+ *
+ * @return array{enviados: int, fallidos: int}
+ */
+function avisos_despachar_inmediatos(): array
+{
+    $resultado = ['enviados' => 0, 'fallidos' => 0];
+    if ((int)q_val("SELECT GET_LOCK('avisos_pago_despacho', 0)") !== 1) {
+        return $resultado;
     }
-    $clave = [$cobroId, $tipo, 'mail', $numero];
-    db()->prepare('INSERT IGNORE INTO avisos_pago (cobro_id, tipo, canal, numero, ok) VALUES (?, ?, ?, ?, 0)')->execute($clave);
-    $ok = q_val('SELECT ok FROM avisos_pago WHERE cobro_id = ? AND tipo = ? AND canal = ? AND numero = ?', $clave);
-    if ($ok === null) {
-        return false;
+    try {
+        $pendientes = q_all(
+            "SELECT id, cobro_id, tipo FROM avisos_pago WHERE ok = 0 AND canal = 'mail' AND tipo IN ('confirmacion', 'rechazo') ORDER BY id"
+        );
+        foreach ($pendientes as $aviso) {
+            $cobro = q_one('SELECT * FROM cobros WHERE id = ?', [(int)$aviso['cobro_id']]);
+            $email = $cobro === null ? '' : trim((string)q_val('SELECT email FROM clientes WHERE id = ?', [(int)$cobro['cliente_id']]));
+            if ($email === '') {
+                error_log('[avisos] No se pudo mandar el aviso ' . $aviso['id'] . ' (' . $aviso['tipo'] . '): el cliente no tiene mail');
+                $resultado['fallidos']++;
+                continue;
+            }
+            if (!mail_enviar(AVISOS_PLANTILLA_INMEDIATA[$aviso['tipo']], $email, aviso_datos_cobro($cobro))) {
+                $resultado['fallidos']++;
+                continue;
+            }
+            db()->prepare('UPDATE avisos_pago SET ok = 1, enviado_en = NOW() WHERE id = ?')->execute([(int)$aviso['id']]);
+            $resultado['enviados']++;
+        }
+    } finally {
+        q_val("SELECT RELEASE_LOCK('avisos_pago_despacho')");
     }
-    if ((int)$ok === 1) {
-        return true;
-    }
-    if (!mail_enviar($plantilla, $email, aviso_datos_cobro($cobro))) {
-        return false;
-    }
-    db()->prepare('UPDATE avisos_pago SET ok = 1, enviado_en = NOW() WHERE cobro_id = ? AND tipo = ? AND canal = ? AND numero = ?')->execute($clave);
-    return true;
+    return $resultado;
 }
