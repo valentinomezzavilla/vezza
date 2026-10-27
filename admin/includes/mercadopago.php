@@ -224,16 +224,23 @@ function mp_cancelar_preapproval(string $id): void
  * Verifica la firma de una notificación (webhook). CONFIRMADO en la guía de webhooks de Mercado Pago:
  * el header x-signature trae "ts=<timestamp>,v1=<hash>"; el hash es HMAC-SHA256 en hexadecimal, con la clave secreta
  * de la aplicación, del manifiesto "id:<data.id>;request-id:<x-request-id>;ts:<ts>;". Si un valor no vino en la
- * notificación se omite esa parte del manifiesto. UNCONFIRMED: la regla de pasar a minúsculas un data.id alfanumérico
- * (no se pudo leer la sección "Sin SDKs"); los pagos tienen id numérico, así que no afecta a los cobros.
+ * notificación se omite esa parte del manifiesto. Un data.id alfanumérico se pasa a minúsculas antes de armar el manifiesto
+ * (regla de la guía, UNCONFIRMED en la sección "Sin SDKs" que no se pudo leer); los pagos tienen id numérico, así que no
+ * afecta a los cobros.
+ *
+ * Con $toleranciaSeg la firma además tiene que ser reciente: el ts (segundos o milisegundos) no puede distanciarse de
+ * $ahora (por defecto, la hora actual) más que esa cantidad de segundos. Sin ella no se mira la hora.
  *
  * @param array<string, string> $headers Headers de la request; los nombres no distinguen mayúsculas ni usan el prefijo HTTP_ de $_SERVER.
  * @param string $dataId El data.id de la query string de la notificación.
  */
-function mp_firma_valida(array $headers, string $dataId, string $secreto): bool
+function mp_firma_valida(array $headers, string $dataId, string $secreto, ?int $toleranciaSeg = null, ?int $ahora = null): bool
 {
     if ($secreto === '') {
         return false;
+    }
+    if (preg_match('/^[A-Za-z0-9]+$/', $dataId)) {
+        $dataId = strtolower($dataId);
     }
     $h = [];
     foreach ($headers as $nombre => $valor) {
@@ -251,6 +258,15 @@ function mp_firma_valida(array $headers, string $dataId, string $secreto): bool
     if ($ts === '' || $v1 === '') {
         return false;
     }
+    if ($toleranciaSeg !== null) {
+        if (!ctype_digit($ts)) {
+            return false;
+        }
+        $segundos = strlen($ts) > 11 ? intdiv((int)$ts, 1000) : (int)$ts;
+        if (abs(($ahora ?? time()) - $segundos) > $toleranciaSeg) {
+            return false;
+        }
+    }
     $manifiesto = '';
     if ($dataId !== '') {
         $manifiesto .= "id:$dataId;";
@@ -260,4 +276,14 @@ function mp_firma_valida(array $headers, string $dataId, string $secreto): bool
     }
     $manifiesto .= "ts:$ts;";
     return hash_equals(hash_hmac('sha256', $manifiesto, $secreto), strtolower($v1));
+}
+
+/**
+ * Un cobro de una suscripción (la "authorized payment" de un preapproval): GET /authorized_payments/{id}. Es lo que
+ * anuncia la notificación subscription_authorized_payment. Interesan preapproval_id, status y payment.{id,status}
+ * (UNCONFIRMED: no se pudo leer la referencia; los nombres son los de la API de suscripciones). Probar en el sandbox.
+ */
+function mp_obtener_cobro_recurrente(string $id): array
+{
+    return mp_request('GET', '/authorized_payments/' . rawurlencode($id));
 }
