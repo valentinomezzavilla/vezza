@@ -247,12 +247,12 @@ function cobro_de_pago_mp(array $pago, bool $bloquear = false): ?array
 }
 
 /**
- * El cobro que ya tiene registrado este pago de Mercado Pago (mp_payment_id es único), o null. Con $bloquear es una lectura
- * con candado (LOCK IN SHARE MODE): ve lo último que se confirmó aunque otra transacción lo haya hecho recién.
+ * El cobro que ya tiene registrado este pago de Mercado Pago (mp_payment_id es único), o null. Es una lectura común, sin
+ * candado a propósito: ver cobro_registrar_pago_mp_detalle().
  */
-function cobro_con_pago_mp(string $paymentId, bool $bloquear = false): ?array
+function cobro_con_pago_mp(string $paymentId): ?array
 {
-    return q_one('SELECT * FROM cobros WHERE mp_payment_id = ?' . ($bloquear ? ' LOCK IN SHARE MODE' : ''), [$paymentId]);
+    return q_one('SELECT * FROM cobros WHERE mp_payment_id = ?', [$paymentId]);
 }
 
 /**
@@ -274,23 +274,29 @@ function cobro_registrar_pago_mp(array $pago): string
 function cobro_registrar_pago_mp_detalle(array $pago): array
 {
     $aprobado = $pago['status'] === 'approved';
+    // Un pago ya registrado no se vuelve a asignar: si no, el aviso repetido de un débito pagaría el cobro del mes siguiente.
+    // Va ANTES de la transacción (lectura sin transacción): una lectura común dentro de ella fijaría la foto de la base
+    // (snapshot) antes de esperar el candado de la suscripción, y entonces la verificación de abajo no vería nada nuevo.
+    $registrado = cobro_con_pago_mp($pago['id']);
+    if ($registrado !== null) {
+        if ($aprobado) {
+            aviso_registrar((int)$registrado['id'], 'confirmacion', 0);
+        }
+        return ['resultado' => 'ya_pagado', 'cobro_id' => (int)$registrado['id'], 'estado_pago' => $pago['status'], 'sin_cobro' => false, 'error' => null];
+    }
     [$resultado, $cobro, $error, $sinCobro] = tx(function () use ($pago, $aprobado): array {
         $sinCobro = fn(?array $cobro, string $error): array => ['sin_cobro', $cobro, $error, true];
-        // Un pago ya registrado no se vuelve a asignar: si no, el aviso repetido de un débito pagaría el cobro del mes siguiente.
-        $registrado = cobro_con_pago_mp($pago['id']);
-        if ($registrado !== null) {
-            if ($aprobado) {
-                aviso_registrar((int)$registrado['id'], 'confirmacion', 0);
-            }
-            return ['ya_pagado', $registrado, null, false];
-        }
+        // Primera sentencia de la transacción. En un pago aprobado de débito es una lectura con candado (FOR UPDATE), que no
+        // fija el snapshot: espera, si hace falta, a que termine la otra transacción que está registrando el mismo pago.
         $encontrado = cobro_de_pago_mp($pago, $aprobado);
         // El mismo pago de débito puede llegar dos veces a la vez (Mercado Pago manda payment y
-        // subscription_authorized_payment). La lectura de arriba no ve lo que la otra transacción confirma mientras esta
-        // esperaba el candado de la suscripción en la consulta anterior: se vuelve a mirar ya con el candado tomado, antes
-        // de dar el pago por huérfano o de intentar guardarlo en el cobro del mes siguiente.
+        // subscription_authorized_payment). Ya con la otra transacción terminada, se vuelve a mirar si registró este pago,
+        // antes de darlo por huérfano o de intentar guardarlo en el cobro del mes siguiente. Tiene que ser una lectura común
+        // y venir después de esa espera: así su snapshot nace recién ahora y ve lo que la otra confirmó. Con candado
+        // (LOCK IN SHARE MODE) tomaría un candado de intervalo sobre uk_cobros_mp_payment y dos pagos distintos que se
+        // cruzaran se bloquearían entre sí al guardar su mp_payment_id (deadlock).
         if ($aprobado && mp_pago_es_debito($pago)) {
-            $registrado = cobro_con_pago_mp($pago['id'], true);
+            $registrado = cobro_con_pago_mp($pago['id']);
             if ($registrado !== null) {
                 return ['ya_pagado', $registrado, null, false];
             }

@@ -633,9 +633,7 @@ final class PagosMpTest extends DbTestCase
         $this->cobro();
 
         $this->assertSame($cobro, (int)cobro_con_pago_mp('800')['id']);
-        $this->assertSame($cobro, (int)cobro_con_pago_mp('800', true)['id']);
         $this->assertNull(cobro_con_pago_mp('801'));
-        $this->assertNull(cobro_con_pago_mp('801', true));
     }
 
     public function test_un_pago_de_debito_ya_registrado_responde_ya_pagado_por_cualquiera_de_sus_dos_avisos(): void
@@ -673,6 +671,7 @@ final class PagosMpTest extends DbTestCase
         $this->assertNull($n['error']);
         $this->assertSame($octubre, (int)$n['cobro_id']);
     }
+
     public function test_el_cobro_de_un_debito_de_otra_suscripcion_no_se_toca(): void
     {
         $mia = $this->debito('pre-1');
@@ -771,6 +770,7 @@ final class PagosMpTest extends DbTestCase
 
         $this->assertSame('sin_cobro', $this->notificar('555')['resultado']);
     }
+
     public function test_un_pago_con_referencia_de_cobro_sin_preferencia_nuestra_no_se_asigna(): void
     {
         $cobro = $this->cobro(['mp_preference_id' => null]);
