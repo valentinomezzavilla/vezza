@@ -41,8 +41,8 @@ bloquea su acceso.
 
 1. **Formulario → n8n:** ya está conectado al workflow
    *VEZZA · Formulario de contacto*
-   (`https://vmezza.app.n8n.cloud/webhook/vezza-contacto`). Ese workflow valida
-   los datos, guarda cada contacto en la tabla `vezza_contactos` y te avisa por
+   (`https://n8n.vezzadev.com/webhook/vezza-contacto`, el n8n propio del VPS). Ese workflow valida
+   los datos, guarda cada contacto en la tabla de datos `Contactos VEZZA` y te avisa por
    mail a `info@vezzadev.com` (enviado por SMTP de Hostinger). Tiene que quedar **activo** en n8n; si lo desactivás, el formulario
    muestra un error.
 
@@ -192,11 +192,11 @@ Vive en el mismo repo y el mismo `public_html`. Es PHP plano más la misma base 
 
    ```dotenv
    PORTAL_URL=https://vezzadev.com
-   MAIL_WEBHOOK_URL=https://vmezza.app.n8n.cloud/webhook/vezza-portal-mail
+   MAIL_WEBHOOK_URL=https://n8n.vezzadev.com/webhook/vezza-portal-mail
    MAIL_WEBHOOK_SECRET=un-secreto-largo-y-aleatorio
    ```
 
-   El secreto tiene que ser el mismo que usa el workflow de n8n "VEZZA · Mails del portal". Sin `MAIL_WEBHOOK_URL` el portal funciona igual, pero los mails no salen: desde la ficha del cliente copiás el link de invitación y lo mandás por WhatsApp o Instagram.
+   El secreto tiene que ser el mismo que usa el workflow de n8n "VEZZA · Mails del portal" (credencial *Portal VEZZA · Secreto del webhook de mails*, header `X-Webhook-Secret`). Ese workflow cubre las plantillas `invitacion`, `recuperacion`, `pago_confirmado` y `debito_rechazado`; si el portal empieza a mandar otra, hay que agregarla en el nodo *Validar y armar mail*. Sin `MAIL_WEBHOOK_URL` el portal funciona igual, pero los mails no salen: desde la ficha del cliente copiás el link de invitación y lo mandás por WhatsApp o Instagram.
 3. Corré `scripts/verificar-portal.sh https://vezzadev.com` y confirmá `Todo OK`.
 
 ### Cómo dar acceso a un cliente
