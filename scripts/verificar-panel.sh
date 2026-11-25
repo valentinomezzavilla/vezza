@@ -20,6 +20,7 @@ esperar 200 /
 esperar 200 /admin-login
 esperar 302 /admin
 esperar 302 /admin/clientes
+esperar 302 /admin/planes
 esperar 302 /admin/clientes/1
 esperar 401 /api/clientes
 esperar 401 /api/clientes/1
