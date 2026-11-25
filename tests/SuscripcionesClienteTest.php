@@ -109,17 +109,93 @@ final class SuscripcionesClienteTest extends DbTestCase
         $this->assertNull($u['mp_preapproval_id']);
         $this->assertNull($u['mp_preapproval_estado']);
         $this->assertNull($u['mp_init_point']);
-        $this->assertSame('30000.00', $u['monto']);
     }
 
-    public function test_cambiar_de_plan_toma_su_precio_salvo_que_se_indique_otro(): void
+    public function test_editar_no_cambia_el_monto(): void
     {
-        $usd = planes_create(['nombre' => 'Dólares', 'monto' => '100', 'moneda' => 'USD', 'frecuencia' => 'anual']);
+        $s = $this->susc(['monto' => '18000']);
+        $u = suscripciones_cliente_update($s['id'], ['monto' => '30000', 'fecha_proximo_cobro' => '2026-05-01']);
+        $this->assertSame('18000.00', $u['monto']);
+        $this->assertSame('2026-05-01', $u['fecha_proximo_cobro']);
+    }
+
+    public function test_cambiar_de_plan_conserva_monto_y_moneda(): void
+    {
+        $otro = planes_create(['nombre' => 'Premium', 'monto' => '90000', 'moneda' => 'ARS', 'frecuencia' => 'mensual']);
         $s = $this->susc(['monto' => '20000']);
-        $u = suscripciones_cliente_update($s['id'], ['plan_id' => $usd['id']]);
-        $this->assertSame('100.00', $u['monto']);
-        $this->assertSame('USD', $u['moneda']);
-        $this->assertSame('90.00', suscripciones_cliente_update($s['id'], ['plan_id' => $this->plan['id'], 'monto' => '90'])['monto']);
+        $u = suscripciones_cliente_update($s['id'], ['plan_id' => $otro['id']]);
+        $this->assertSame($otro['id'], $u['plan_id']);
+        $this->assertSame('20000.00', $u['monto']);
+        $this->assertSame('ARS', $u['moneda']);
+    }
+
+    public function test_cambiar_a_un_plan_de_otra_moneda_da_422(): void
+    {
+        $usd = planes_create(['nombre' => 'Dólares', 'monto' => '100', 'moneda' => 'USD', 'frecuencia' => 'mensual']);
+        $s = $this->susc();
+        $this->assertArrayHasKey('plan_id', $this->errores422(fn() => suscripciones_cliente_update($s['id'], ['plan_id' => $usd['id']])));
+        $actual = suscripciones_cliente_get($s['id']);
+        $this->assertSame($this->plan['id'], $actual['plan_id']);
+        $this->assertSame('ARS', $actual['moneda']);
+    }
+
+    public function test_la_modalidad_link_ya_no_existe(): void
+    {
+        $this->assertArrayHasKey('modalidad', $this->errores422(fn() => $this->susc(['modalidad' => 'link'])));
+    }
+
+    public function test_estado_cobro_en_los_bordes(): void
+    {
+        $hoy = '2026-03-10';
+        $this->assertSame(['estado' => 'vencido', 'dias' => -1], suscripcion_estado_cobro('2026-03-09', $hoy));
+        $this->assertSame(['estado' => 'por_vencer', 'dias' => 0], suscripcion_estado_cobro('2026-03-10', $hoy));
+        $this->assertSame(['estado' => 'por_vencer', 'dias' => 7], suscripcion_estado_cobro('2026-03-17', $hoy));
+        $this->assertSame(['estado' => 'al_dia', 'dias' => 8], suscripcion_estado_cobro('2026-03-18', $hoy));
+        $this->assertSame(['estado' => 'sin_fecha', 'dias' => null], suscripcion_estado_cobro(null, $hoy));
+    }
+
+    public function test_el_estado_usa_hoy_del_reloj_si_no_se_lo_pasan(): void
+    {
+        $this->assertSame('vencido', suscripcion_estado_cobro('2026-03-09')['estado']);
+        $this->assertSame('al_dia', suscripcion_estado_cobro('2026-04-01')['estado']);
+    }
+
+    public function test_listar_y_traer_incluyen_el_estado_calculado(): void
+    {
+        $vencida = $this->susc(['fecha_proximo_cobro' => '2026-03-09']);
+        $this->assertSame('vencido', $vencida['cobro_estado']);
+        $this->assertSame(-1, $vencida['cobro_dias']);
+        $lista = suscripciones_cliente_list([]);
+        $this->assertSame('vencido', $lista[0]['cobro_estado']);
+        $this->assertSame(-1, $lista[0]['cobro_dias']);
+        $this->assertSame('vencido', suscripciones_cliente_get($vencida['id'])['cobro_estado']);
+    }
+
+    public function test_no_se_borra_con_el_debito_en_curso(): void
+    {
+        foreach (['pendiente', 'autorizada', 'pausada'] as $estado) {
+            $s = $this->susc();
+            crud_update('suscripciones_cliente', $s['id'], ['mp_preapproval_id' => "pre-$estado", 'mp_preapproval_estado' => $estado]);
+            $this->assertHttp(409, fn() => suscripciones_cliente_delete($s['id']));
+            $this->assertSame($s['id'], suscripciones_cliente_get($s['id'])['id']);
+        }
+        $cancelada = $this->susc();
+        crud_update('suscripciones_cliente', $cancelada['id'], ['mp_preapproval_id' => 'pre-cancelada', 'mp_preapproval_estado' => 'cancelada']);
+        suscripciones_cliente_delete($cancelada['id']);
+        $this->assertHttp(404, fn() => suscripciones_cliente_get($cancelada['id']));
+
+        $sinDebito = $this->susc();
+        suscripciones_cliente_delete($sinDebito['id']);
+        $this->assertHttp(404, fn() => suscripciones_cliente_get($sinDebito['id']));
+    }
+
+    public function test_listar_filtra_por_estado_cancelada(): void
+    {
+        $activa = $this->susc();
+        $baja = $this->susc();
+        crud_update('suscripciones_cliente', $baja['id'], ['estado' => 'cancelada', 'fecha_baja' => '2026-03-01']);
+        $this->assertSame([$baja['id']], array_column(suscripciones_cliente_list(['estado' => 'cancelada']), 'id'));
+        $this->assertSame([$activa['id']], array_column(suscripciones_cliente_list(['estado' => 'activa']), 'id'));
     }
 
     public function test_listar_filtra_por_cliente(): void
