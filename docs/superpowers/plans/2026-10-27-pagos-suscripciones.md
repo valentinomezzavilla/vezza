@@ -1,5 +1,7 @@
 # Cobro de suscripciones mensuales con Mercado Pago — Plan de implementación
 
+> Reemplazado en lo que respecta al cobro por `2026-11-25-pagos-estilo-vezzashop-design.md` (spec) y `2026-11-25-pagos-estilo-vezzashop.md` (plan).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Que cada cliente pague su suscripción mensual por débito automático o link de Mercado Pago (o por transferencia, como hoy), que el sistema valide solo cada pago, avise por mail y WhatsApp cuando no pagó sin pausar nada, y que se vea en la pestaña "Suscripciones mensuales" de Cobros y en la pantalla Pagos del portal.

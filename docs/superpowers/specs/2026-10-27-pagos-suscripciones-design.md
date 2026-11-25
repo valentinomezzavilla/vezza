@@ -1,5 +1,7 @@
 # Cobro de suscripciones mensuales con Mercado Pago — Diseño
 
+> Reemplazado en lo que respecta al cobro por `2026-11-25-pagos-estilo-vezzashop-design.md` (spec) y `2026-11-25-pagos-estilo-vezzashop.md` (plan).
+
 Fecha: 2026-10-27. Estado: borrador para aprobación.
 
 ## 1. Intención y por qué
