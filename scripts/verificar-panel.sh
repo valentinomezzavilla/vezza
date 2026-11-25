@@ -20,10 +20,14 @@ esperar 200 /
 esperar 200 /admin-login
 esperar 302 /admin
 esperar 302 /admin/clientes
+esperar 302 /admin/planes
 esperar 302 /admin/clientes/1
 esperar 401 /api/clientes
 esperar 401 /api/clientes/1
 esperar 401 /api/reportes/balance
+esperar 401 /api/suscripciones-mensuales
+esperar 401 /api/suscripciones-cliente/1/pagar
+esperar 405 /api/mp-webhook
 for ruta in /.env /.env.example /.env.testing /composer.json /composer.lock /phpunit.xml \
             /db/migrations/001_inicial.sql /db/migrate.php /admin/includes/env.php \
             /admin/includes/repos/clientes.php /scripts/hash-password.php /tests/bootstrap.php \

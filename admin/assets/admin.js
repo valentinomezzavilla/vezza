@@ -315,10 +315,11 @@ const Panel = (() => {
     estadoFix: { reportado: 'Reportado', en_progreso: 'En progreso', resuelto: 'Resuelto' },
     tipoEvento: { reunion: 'Reunión', llamada: 'Llamada', recordatorio: 'Recordatorio', otro: 'Otro' },
     frecuencia: { mensual: 'Mensual', anual: 'Anual' },
+    estadoSuscripcion: { al_dia: 'Al día', por_vencer: 'Por vencer', vencido: 'Vencido', sin_fecha: 'Sin fecha' },
   };
   const VARIANTE = {
     activo: 'ok', pagado: 'ok', entregado: 'ok', hecha: 'ok', resuelto: 'ok',
-    vencido: 'danger', alta: 'danger',
+    al_dia: 'ok', por_vencer: 'warn', vencido: 'danger', alta: 'danger',
     pausado: 'warn', pendiente: 'warn', reportado: 'warn',
     en_curso: 'accent', en_revision: 'accent', en_progreso: 'accent',
   };
@@ -365,6 +366,10 @@ const Panel = (() => {
         botones[i].setAttribute('aria-selected', String(x.id === t.id));
         botones[i].tabIndex = x.id === t.id ? 0 : -1;
       });
+      // En el celular la barra se desplaza sin barra visible: la pestaña activa tiene que quedar a la vista.
+      const activo = botones[lista.indexOf(t)].getBoundingClientRect();
+      const caja = barra.getBoundingClientRect();
+      barra.scrollLeft += activo.left - caja.left - (caja.width - activo.width) / 2;
       panel.setAttribute('aria-labelledby', `pestana-${t.id}`);
       history.replaceState(null, '', `${location.pathname}${location.search}#${t.id}`);
       llenar(panel, el('p', { class: 'item-sub', text: 'Cargando…' }));
