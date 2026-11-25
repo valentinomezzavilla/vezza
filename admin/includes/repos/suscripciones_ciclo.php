@@ -183,3 +183,82 @@ function suscripcion_avisar_baja(int $id, string $motivo): string
     }
     return 'enviado';
 }
+
+// ---- Ajustar precio ------------------------------------------------------------------------------------------------
+
+/** "$85.000" (con centavos, "$85.000,50", solo cuando no son cero). */
+function monto_formato_ar(string|float $monto): string
+{
+    $centavos = (int)round(abs((float)$monto) * 100);
+    $texto = '$' . number_format(intdiv($centavos, 100), 0, ',', '.');
+    if ($centavos % 100 !== 0) {
+        $texto .= ',' . sprintf('%02d', $centavos % 100);
+    }
+    return ((float)$monto < 0 && $centavos > 0 ? '-' : '') . $texto;
+}
+
+/**
+ * Cambia el precio de UNA suscripción (cada cliente tiene el suyo) y le avisa por mail desde cuándo rige. Con débito en
+ * curso, primero se actualiza el monto en Mercado Pago (PUT /preapproval): si no lo acepta o contesta con otro monto, 502 y no
+ * se cambia nada. Un débito todavía pendiente de autorización también se actualiza, así el cliente no autoriza el monto viejo
+ * (UNCONFIRMED: que Mercado Pago acepte cambiar el monto de una suscripción pendiente; si no, el error avisa y hay que cancelar y
+ * volver a pasar a débito). Los cobros ya registrados no cambian. El mail que no sale no deshace el cambio.
+ *
+ * @return array{suscripcion: array, aviso: string} aviso: 'enviado' | 'no_enviado' | 'sin_mail'
+ */
+function suscripcion_cliente_ajustar_precio(int $id, array $input): array
+{
+    $s = suscripciones_cliente_get($id);
+    if ($s['estado'] === 'cancelada') {
+        throw new HttpError(409, 'La suscripción está cancelada.');
+    }
+    $nuevo = validate($input, ['monto' => ['type' => 'decimal', 'required' => true]])['monto'];
+    if ((float)$nuevo <= 0) {
+        throw new HttpError(422, 'Revisá los datos marcados', ['monto' => 'Tiene que ser mayor que cero']);
+    }
+    if ($nuevo === $s['monto']) {
+        throw new HttpError(422, 'Revisá los datos marcados', ['monto' => 'Es el mismo monto que ya tiene']);
+    }
+
+    if ($s['mp_preapproval_id'] !== null && in_array($s['mp_preapproval_estado'], DEBITO_EN_CURSO, true)) {
+        try {
+            $r = mp_actualizar_preapproval((string)$s['mp_preapproval_id'], [
+                'auto_recurring' => ['transaction_amount' => (float)$nuevo, 'currency_id' => $s['moneda']],
+            ]);
+        } catch (RuntimeException $e) {
+            throw suscripcion_mp_error($e);
+        }
+        $devuelto = $r['auto_recurring']['transaction_amount'] ?? null;
+        if ($devuelto !== null && (int)round((float)$devuelto * 100) !== (int)round((float)$nuevo * 100)) {
+            throw new HttpError(502, 'Mercado Pago no aplicó el monto nuevo. No se cambió nada.');
+        }
+    }
+
+    $historialId = tx(function () use ($id, $s, $nuevo): int {
+        crud_update('suscripciones_cliente', $id, ['monto' => $nuevo]);
+        return crud_insert('suscripciones_precio_historial', [
+            'suscripcion_cliente_id' => $id,
+            'monto_anterior' => $s['monto'],
+            'monto_nuevo' => $nuevo,
+            'moneda' => $s['moneda'],
+        ]);
+    });
+
+    $cliente = q_one('SELECT nombre, email FROM clientes WHERE id = ?', [(int)$s['cliente_id']]);
+    $email = trim((string)($cliente['email'] ?? ''));
+    $aviso = 'sin_mail';
+    if ($email !== '') {
+        $enviado = mail_enviar('precio_cambiado', $email, [
+            'nombre' => (string)$cliente['nombre'],
+            'plan' => (string)$s['plan_nombre'],
+            'monto_anterior' => monto_formato_ar($s['monto']),
+            'monto_nuevo' => monto_formato_ar($nuevo),
+            'desde' => $s['fecha_proximo_cobro'] !== null ? fecha_larga_es($s['fecha_proximo_cobro']) : '',
+        ]);
+        if ($enviado) {
+            db()->prepare('UPDATE suscripciones_precio_historial SET avisado_en = NOW() WHERE id = ?')->execute([$historialId]);
+        }
+        $aviso = $enviado ? 'enviado' : 'no_enviado';
+    }
+    return ['suscripcion' => suscripciones_cliente_get($id), 'aviso' => $aviso];
+}

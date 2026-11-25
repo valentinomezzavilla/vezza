@@ -372,4 +372,136 @@ final class SuscripcionesCicloTest extends DbTestCase
         $s = $this->susc();
         $this->assertHttp(409, fn() => suscripcion_cliente_reactivar($s['id']));
     }
+
+    // ---- ajustar precio ----
+
+    private function historial(int $id): array
+    {
+        return q_all('SELECT * FROM suscripciones_precio_historial WHERE suscripcion_cliente_id = ? ORDER BY id', [$id]);
+    }
+
+    public function test_monto_formato_ar(): void
+    {
+        $this->assertSame('$85.000', monto_formato_ar(85000));
+        $this->assertSame('$85.000', monto_formato_ar('85000.00'));
+        $this->assertSame('$85.000,50', monto_formato_ar('85000.50'));
+        $this->assertSame('$1.234.567', monto_formato_ar('1234567.00'));
+        $this->assertSame('$0', monto_formato_ar('0.00'));
+    }
+
+    public function test_ajustar_el_precio_guarda_el_monto_el_historial_y_manda_el_mail(): void
+    {
+        $s = $this->susc(['fecha_proximo_cobro' => '2026-04-01']);
+
+        $r = suscripcion_cliente_ajustar_precio($s['id'], ['monto' => '30.000']);
+
+        $this->assertSame('30000.00', $r['suscripcion']['monto']);
+        $this->assertSame('enviado', $r['aviso']);
+        $this->assertSame([], $this->llamadas);
+        $h = $this->historial($s['id']);
+        $this->assertCount(1, $h);
+        $this->assertSame('25000.00', $h[0]['monto_anterior']);
+        $this->assertSame('30000.00', $h[0]['monto_nuevo']);
+        $this->assertSame('ARS', $h[0]['moneda']);
+        $this->assertNotNull($h[0]['avisado_en']);
+        $this->assertCount(1, $this->mails);
+        $this->assertSame('precio_cambiado', $this->mails[0]['plantilla']);
+        $this->assertSame('acme@sol.com', $this->mails[0]['destino']);
+        $this->assertSame(
+            ['nombre' => 'Acme', 'plan' => 'Mantenimiento', 'monto_anterior' => '$25.000', 'monto_nuevo' => '$30.000', 'desde' => '1 de abril de 2026'],
+            $this->mails[0]['datos']
+        );
+    }
+
+    public function test_con_debito_en_curso_actualiza_primero_el_monto_en_mercado_pago(): void
+    {
+        foreach (['autorizada', 'pausada', 'pendiente'] as $estado) {
+            $this->llamadas = [];
+            $s = $this->conDebito($estado, [], "pre-$estado");
+            $this->mpRespuesta = ['id' => "pre-$estado", 'auto_recurring' => ['transaction_amount' => 30000.0, 'currency_id' => 'ARS']];
+
+            $r = suscripcion_cliente_ajustar_precio($s['id'], ['monto' => '30000']);
+
+            $this->assertSame(
+                ['PUT', "/preapproval/pre-$estado", ['auto_recurring' => ['transaction_amount' => 30000.0, 'currency_id' => 'ARS']]],
+                $this->llamadas[0],
+                $estado
+            );
+            $this->assertSame('30000.00', $r['suscripcion']['monto']);
+        }
+    }
+
+    public function test_si_mercado_pago_devuelve_otro_monto_da_502_y_no_cambia_nada(): void
+    {
+        $s = $this->conDebito('autorizada');
+        $this->mpRespuesta = ['id' => 'pre-1', 'auto_recurring' => ['transaction_amount' => 25000.0, 'currency_id' => 'ARS']];
+
+        $this->assertHttp(502, fn() => suscripcion_cliente_ajustar_precio($s['id'], ['monto' => '30000']));
+
+        $this->assertSame('25000.00', $this->fila($s['id'])['monto']);
+        $this->assertSame([], $this->historial($s['id']));
+        $this->assertSame([], $this->mails);
+    }
+
+    public function test_con_mercado_pago_caido_da_502_y_no_cambia_nada(): void
+    {
+        $s = $this->conDebito('autorizada');
+        $this->mpCae = true;
+
+        $this->assertHttp(502, fn() => suscripcion_cliente_ajustar_precio($s['id'], ['monto' => '30000']));
+
+        $this->assertSame('25000.00', $this->fila($s['id'])['monto']);
+        $this->assertSame([], $this->historial($s['id']));
+        $this->assertSame([], $this->mails);
+    }
+
+    public function test_un_monto_invalido_o_igual_da_422_y_una_cancelada_da_409(): void
+    {
+        $s = $this->susc();
+        foreach (['0', '-5', 'abc', '25000', '25.000,00'] as $monto) {
+            $this->assertArrayHasKey('monto', $this->errores422(fn() => suscripcion_cliente_ajustar_precio($s['id'], ['monto' => $monto])), $monto);
+        }
+        $this->assertArrayHasKey('monto', $this->errores422(fn() => suscripcion_cliente_ajustar_precio($s['id'], [])));
+        $this->assertSame([], $this->historial($s['id']));
+        $this->assertSame([], $this->mails);
+
+        crud_update('suscripciones_cliente', $s['id'], ['estado' => 'cancelada', 'fecha_baja' => '2026-03-01']);
+        $this->assertHttp(409, fn() => suscripcion_cliente_ajustar_precio($s['id'], ['monto' => '30000']));
+    }
+
+    public function test_los_cobros_ya_registrados_no_cambian(): void
+    {
+        $s = $this->susc(['fecha_proximo_cobro' => '2026-03-15']);
+        $cobro = suscripcion_pago_manual($s['id'], [])['cobro'];
+
+        suscripcion_cliente_ajustar_precio($s['id'], ['monto' => '40000']);
+
+        $this->assertSame('25000.00', cobros_get($cobro['id'])['monto']);
+        $this->assertSame('40000.00', $this->fila($s['id'])['monto']);
+    }
+
+    public function test_si_el_mail_falla_el_cambio_igual_queda_y_avisado_en_sigue_nulo(): void
+    {
+        $s = $this->susc();
+        $this->mailOk = false;
+
+        $r = suscripcion_cliente_ajustar_precio($s['id'], ['monto' => '30000']);
+
+        $this->assertSame('no_enviado', $r['aviso']);
+        $this->assertSame('30000.00', $r['suscripcion']['monto']);
+        $this->assertNull($this->historial($s['id'])[0]['avisado_en']);
+    }
+
+    public function test_un_cliente_sin_mail_cambia_igual_y_devuelve_sin_mail(): void
+    {
+        $sinMail = clientes_create(['nombre' => 'Sin mail'])['id'];
+        $s = $this->susc(['cliente_id' => $sinMail]);
+
+        $r = suscripcion_cliente_ajustar_precio($s['id'], ['monto' => '30000']);
+
+        $this->assertSame('sin_mail', $r['aviso']);
+        $this->assertSame('30000.00', $r['suscripcion']['monto']);
+        $this->assertSame([], $this->mails);
+        $this->assertCount(1, $this->historial($s['id']));
+    }
 }
