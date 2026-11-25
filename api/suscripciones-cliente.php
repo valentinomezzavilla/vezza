@@ -3,6 +3,17 @@ declare(strict_types=1);
 
 require __DIR__ . '/../admin/includes/bootstrap.php';
 
+// La lectura de la pestaña "Suscripciones mensuales": GET /api/suscripciones-mensuales[?cliente_id=] (ver la regla de .htaccess).
+if (($_GET['accion'] ?? '') === 'mensuales') {
+    api_run(function (): void {
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+            throw new HttpError(405, 'Método no permitido');
+        }
+        json_out(200, ['data' => suscripciones_mensuales($_GET)]);
+    });
+    return;
+}
+
 // Acciones sobre una suscripción: POST /api/suscripciones-cliente/{id}/{accion} (ver la regla de .htaccess).
 // Cada una es [función($id, $cuerpo), status de éxito].
 if (($_GET['accion'] ?? '') !== '') {

@@ -106,6 +106,7 @@ DirectoryIndex index.html
   RewriteRule ^admin/(clientes|procesos|cobros|gastos|tareas|fixs|agenda|reportes|migraciones)$ admin/$1.php [L,QSA]
   RewriteRule ^api/suscripciones/([0-9]+)/pagar$ api/suscripciones.php?id=$1&accion=pagar [L,QSA]
   RewriteRule ^api/suscripciones-cliente/([0-9]+)/([a-z-]+)$ api/suscripciones-cliente.php?id=$1&accion=$2 [L,QSA]
+  RewriteRule ^api/suscripciones-mensuales$ api/suscripciones-cliente.php?accion=mensuales [L,QSA]
   RewriteRule ^api/reportes/balance$ api/reportes.php [L,QSA]
   RewriteRule ^api/([a-z-]+)/([0-9]+)$ api/$1.php?id=$2 [L,QSA]
   RewriteRule ^api/([a-z-]+)$ api/$1.php [L,QSA]
