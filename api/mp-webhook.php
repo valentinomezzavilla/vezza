@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 // Webhook de Mercado Pago. Público: sin sesión ni CSRF (por eso no usa api_run); la autenticidad sale de la firma
-// (x-signature) y de consultar cada pago en la API de Mercado Pago. Toda la lógica vive en pagos_mp.php.
+// (x-signature) y de consultar cada cobro y cada suscripción en la API de Mercado Pago. Toda la lógica vive en pagos_mp.php.
 
 require __DIR__ . '/../admin/includes/bootstrap.php';
 
@@ -27,16 +27,4 @@ try {
 } catch (Throwable $e) {
     error_log('[mp-webhook] ' . $e);
     json_out(500, ['resultado' => 'error']);
-    return;
-}
-
-// Los mails de confirmación o rechazo salen después de contestarle a Mercado Pago (el SMTP tarda ~10 s y un reintento
-// de Mercado Pago no tiene que esperar ni duplicarlos).
-if ($r['http'] === 200) {
-    responder_y_seguir();
-    try {
-        avisos_despachar_inmediatos();
-    } catch (Throwable $e) {
-        error_log('[mp-webhook] No se pudieron despachar los avisos: ' . $e);
-    }
 }

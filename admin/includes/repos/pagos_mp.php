@@ -2,11 +2,11 @@
 declare(strict_types=1);
 
 /*
- * Pagos de Mercado Pago: el webhook y el registro de cada pago en su cobro.
+ * Pagos de Mercado Pago: el webhook de suscripciones, el registro de cada cobro aprobado y Sincronizar.
  *
- * Regla de oro: un cobro solo pasa a `pagado` después de consultar el pago en la API de Mercado Pago (nunca por lo que
- * trae el cuerpo del aviso), una sola vez, y con el mismo monto y moneda que el cobro. La idempotencia sale de
- * cobros.mp_payment_id (único) y de tomar el cobro con SELECT ... FOR UPDATE dentro de una transacción.
+ * Regla de oro: un pago solo se registra después de consultarlo a la API de Mercado Pago (nunca por lo que trae el cuerpo del
+ * aviso), una sola vez (cobros.mp_payment_id es único y suscripcion_registrar_pago toma la fila de la suscripción con FOR UPDATE),
+ * y el estado de la suscripción en Mercado Pago se lee siempre de la API, no del aviso. Un aviso solo dice "andá a mirar".
  */
 
 /** La consulta a Mercado Pago falló (red, token, respuesta rara): el webhook responde 500 para que reintente. */
@@ -55,6 +55,18 @@ function mp_preapproval_normalizar(array $p): array
     return ['status' => (string)($p['status'] ?? '')];
 }
 
+/** El estado de una suscripción de Mercado Pago en los nuestros. La baja aparece escrita de las dos maneras en su documentación. */
+function mp_estado_preapproval(string $status): ?string
+{
+    return match ($status) {
+        'pending' => 'pendiente',
+        'authorized' => 'autorizada',
+        'paused' => 'pausada',
+        'cancelled', 'canceled' => 'cancelada',
+        default => null,
+    };
+}
+
 /** Corre una consulta a Mercado Pago; cualquier falla sale como MpConsultaFallida (el mensaje no lleva credenciales). */
 function mp_consultar(callable $consulta): array
 {
@@ -81,7 +93,7 @@ function mp_consultar_pago(string $id): array
  * Procesa una notificación de Mercado Pago. $headers: x-signature y x-request-id (con o sin el prefijo HTTP_ de
  * $_SERVER); $query: la query string ya decodificada (data.id llega como data_id en $_GET); $cuerpoCrudo: el cuerpo tal
  * cual llegó. 401 si la firma no valida (no toca nada); 200 si se procesó o no había nada que hacer; 500 si falló la
- * consulta a Mercado Pago o algo interno (Mercado Pago reintenta).
+ * consulta a Mercado Pago o algo interno (Mercado Pago reintenta). Solo se atienden los temas de suscripciones.
  *
  * @return array{http: int, resultado: string}
  */
@@ -115,7 +127,6 @@ function mp_webhook_procesar(array $headers, array $query, string $cuerpoCrudo):
 
     try {
         $r = match ($tipo) {
-            'payment' => cobro_registrar_pago_mp_detalle(mp_consultar_pago($dataId)),
             'subscription_authorized_payment' => mp_procesar_cobro_recurrente($dataId),
             'subscription_preapproval', 'preapproval' => mp_procesar_preapproval($dataId),
             default => ['resultado' => 'ignorado'],
@@ -127,9 +138,7 @@ function mp_webhook_procesar(array $headers, array $query, string $cuerpoCrudo):
         return ['http' => 500, 'resultado' => $consulta ? 'error_consulta' : 'error_interno'];
     }
 
-    db()->prepare('UPDATE mp_notificaciones SET cobro_id = ?, estado_pago = ?, sin_cobro = ?, error = ?, procesada_en = NOW() WHERE id = ?')->execute([
-        $r['cobro_id'] ?? null,
-        isset($r['estado_pago']) ? mb_substr((string)$r['estado_pago'], 0, 30) : null,
+    db()->prepare('UPDATE mp_notificaciones SET sin_cobro = ?, error = ?, procesada_en = NOW() WHERE id = ?')->execute([
         !empty($r['sin_cobro']) ? 1 : 0,
         isset($r['error']) ? mb_substr((string)$r['error'], 0, 255) : null,
         $notificacion,
@@ -146,7 +155,11 @@ function mp_notificacion_registrar_error(int $id, string $error): void
     }
 }
 
-/** Un cobro de una suscripción con débito: se busca su pago y se registra como cualquier otro. */
+/**
+ * Un cobro del débito automático: se consulta el cobro recurrente, se busca su pago y se registra como cualquier otro.
+ *
+ * @return array{resultado: string, sin_cobro?: bool, error?: ?string}
+ */
 function mp_procesar_cobro_recurrente(string $id): array
 {
     $r = mp_recurrente_normalizar(mp_consultar(fn() => mp_obtener_cobro_recurrente($id)));
@@ -157,193 +170,159 @@ function mp_procesar_cobro_recurrente(string $id): array
     if ($pago['preapproval_id'] === '') {
         $pago['preapproval_id'] = $r['preapproval_id'];
     }
-    return cobro_registrar_pago_mp_detalle($pago);
+    return mp_pago_registrar($pago);
 }
 
-/** Una suscripción: solo si Mercado Pago confirma que está autorizada se pasa a débito. */
+/**
+ * Cambió una suscripción de Mercado Pago: se lee su estado real de la API y se aplica. Una que no es nuestra queda marcada
+ * para revisar (sin_cobro) y no se consulta.
+ *
+ * @return array{resultado: string, sin_cobro?: bool, error?: ?string}
+ */
 function mp_procesar_preapproval(string $id): array
 {
-    $p = mp_preapproval_normalizar(mp_consultar(fn() => mp_obtener_preapproval($id)));
-    if (q_val('SELECT 1 FROM suscripciones_cliente WHERE mp_preapproval_id = ?', [$id]) === null) {
+    $s = q_one('SELECT id FROM suscripciones_cliente WHERE mp_preapproval_id = ?', [$id]);
+    if ($s === null) {
         return ['resultado' => 'sin_suscripcion', 'sin_cobro' => true, 'error' => "No hay una suscripción con el preapproval $id"];
     }
-    if ($p['status'] !== 'authorized') {
-        return ['resultado' => 'sin_cambios'];
-    }
-    suscripcion_confirmar_preapproval($id);
-    return ['resultado' => 'autorizada'];
-}
-
-/** Mercado Pago informó que el cliente autorizó el débito: la suscripción pasa a débito automático. Solo si estaba pendiente. */
-function suscripcion_confirmar_preapproval(string $preapprovalId): void
-{
-    db()->prepare(
-        "UPDATE suscripciones_cliente SET mp_preapproval_estado = 'autorizada', modalidad = 'debito'
-         WHERE mp_preapproval_id = ? AND mp_preapproval_estado = 'pendiente'"
-    )->execute([$preapprovalId]);
-}
-
-// ---- Registro del pago en el cobro -------------------------------------------------------------------------------
-
-/** Pesos a centavos enteros, para comparar montos sin errores de coma flotante. */
-function mp_centavos(string|float|null $monto): ?int
-{
-    return $monto === null ? null : (int)round((float)$monto * 100);
+    $p = mp_preapproval_normalizar(mp_consultar(fn() => mp_obtener_preapproval($id)));
+    return ['resultado' => suscripcion_aplicar_preapproval((int)$s['id'], $p['status'])];
 }
 
 /**
- * Las referencias externas que armamos llevan prefijo: 'cobro-{id}' (preferencia de un cobro) y 'susc-{id}' (suscripción
- * con débito). Sin prefijo los ids de las dos tablas se confundirían entre sí; lo que no tenga prefijo no se reconoce.
+ * Aplica a la suscripción local el estado que Mercado Pago informa para su débito:
+ * - autorizada: el débito está vivo, la modalidad pasa a débito y se saca la pausa;
+ * - pausada: queda pausada;
+ * - cancelada: si estaba autorizada o pausada, el débito se terminó pero la suscripción sigue activa y vuelve a transferencia, y se
+ *   avisa al cliente; si nunca se autorizó, solo cambia el estado del débito. Una cancelada no vuelve a vivir: reactivar crea otra;
+ * - pendiente: nunca retrocede un estado posterior.
  *
- * @return array{0: string, 1: int}|null [tipo, id]
+ * @return string 'autorizada' | 'pausada' | 'cancelada' | 'pendiente' | 'sin_cambios' | 'sin_suscripcion'
  */
-function mp_referencia_interpretar(string $ref): ?array
+function suscripcion_aplicar_preapproval(int $id, string $statusMp): string
 {
-    return preg_match('/^(cobro|susc)-(\d{1,10})$/', $ref, $m) ? [$m[1], (int)$m[2]] : null;
-}
-
-/** Un pago es de débito si trae el preapproval de su suscripción o su referencia es de suscripción. */
-function mp_pago_es_debito(array $pago): bool
-{
-    return $pago['preapproval_id'] !== '' || (mp_referencia_interpretar($pago['referencia_externa'])[0] ?? '') === 'susc';
-}
-
-/**
- * Busca el cobro al que corresponde un pago ya normalizado (mp_pago_normalizar), sin adivinar:
- * - con preapproval_id (o referencia 'susc-N') es de débito: el cobro pendiente más antiguo de esa suscripción cuyo monto
- *   coincida (el preapproval del pago manda sobre la referencia);
- * - con referencia 'cobro-N' es un pago por link: el cobro N, solo si tiene una preferencia nuestra (mp_preference_id);
- * - cualquier otra cosa (incluida una referencia numérica pelada) no se asigna a nada.
- * $bloquear toma la fila con FOR UPDATE (dentro de una transacción): en el débito eso bloquea la suscripción y sus cobros,
- * y así dos avisos del mismo pago se hacen cola en lugar de pisarse.
- */
-function cobro_de_pago_mp(array $pago, bool $bloquear = false): ?array
-{
-    $ref = mp_referencia_interpretar($pago['referencia_externa']);
-    if ($pago['preapproval_id'] !== '' || ($ref[0] ?? '') === 'susc') {
-        if ($pago['monto'] === null) {
-            return null;
-        }
-        if ($pago['preapproval_id'] !== '') {
-            $donde = 'sc.mp_preapproval_id = ?';
-            $params = [$pago['preapproval_id']];
-        } else {
-            $donde = 'sc.id = ?';
-            $params = [$ref[1]];
-        }
-        $params[] = number_format($pago['monto'], 2, '.', '');
-        return q_one(
-            "SELECT c.* FROM cobros c
-             JOIN suscripciones_cliente sc ON sc.id = c.suscripcion_cliente_id
-             WHERE $donde AND c.estado = 'pendiente' AND c.monto = ?
-             ORDER BY c.fecha_vencimiento, c.id LIMIT 1" . ($bloquear ? ' FOR UPDATE' : ''),
-            $params
-        );
+    $nuevo = mp_estado_preapproval($statusMp);
+    if ($nuevo === null) {
+        return 'sin_cambios';
     }
-    if ($ref !== null && $ref[0] === 'cobro') {
-        return q_one('SELECT * FROM cobros WHERE id = ? AND mp_preference_id IS NOT NULL', [$ref[1]]);
-    }
-    return null;
-}
-
-/**
- * El cobro que ya tiene registrado este pago de Mercado Pago (mp_payment_id es único), o null. Es una lectura común, sin
- * candado a propósito: ver cobro_registrar_pago_mp_detalle().
- */
-function cobro_con_pago_mp(string $paymentId): ?array
-{
-    return q_one('SELECT * FROM cobros WHERE mp_payment_id = ?', [$paymentId]);
-}
-
-/**
- * Registra un pago de Mercado Pago ya normalizado en su cobro: 'pagado', 'ya_pagado', 'sin_cobro', 'monto_distinto'
- * o 'no_aprobado'. Para el webhook, con los datos de la notificación, ver cobro_registrar_pago_mp_detalle().
- */
-function cobro_registrar_pago_mp(array $pago): string
-{
-    return cobro_registrar_pago_mp_detalle($pago)['resultado'];
-}
-
-/**
- * Como cobro_registrar_pago_mp, y además devuelve lo que se anota en la notificación: cobro_id, estado_pago (el status
- * del pago en Mercado Pago), sin_cobro y error. No manda mails: deja el aviso (confirmación o rechazo) registrado en
- * avisos_pago con ok = 0, en la misma transacción, y lo despacha avisos_despachar_inmediatos() fuera del request.
- *
- * @return array{resultado: string, cobro_id: ?int, estado_pago: string, sin_cobro: bool, error: ?string}
- */
-function cobro_registrar_pago_mp_detalle(array $pago): array
-{
-    $aprobado = $pago['status'] === 'approved';
-    // Un pago ya registrado no se vuelve a asignar: si no, el aviso repetido de un débito pagaría el cobro del mes siguiente.
-    // Va ANTES de la transacción (lectura sin transacción): una lectura común dentro de ella fijaría la foto de la base
-    // (snapshot) antes de esperar el candado de la suscripción, y entonces la verificación de abajo no vería nada nuevo.
-    $registrado = cobro_con_pago_mp($pago['id']);
-    if ($registrado !== null) {
-        if ($aprobado) {
-            aviso_registrar((int)$registrado['id'], 'confirmacion', 0);
+    $avisar = false;
+    $resultado = tx(function () use ($id, $nuevo, &$avisar): string {
+        $s = q_one('SELECT * FROM suscripciones_cliente WHERE id = ? FOR UPDATE', [$id]);
+        if ($s === null) {
+            return 'sin_suscripcion';
         }
-        return ['resultado' => 'ya_pagado', 'cobro_id' => (int)$registrado['id'], 'estado_pago' => $pago['status'], 'sin_cobro' => false, 'error' => null];
-    }
-    [$resultado, $cobro, $error, $sinCobro] = tx(function () use ($pago, $aprobado): array {
-        $sinCobro = fn(?array $cobro, string $error): array => ['sin_cobro', $cobro, $error, true];
-        // Primera sentencia de la transacción. En un pago aprobado de débito es una lectura con candado (FOR UPDATE), que no
-        // fija el snapshot: espera, si hace falta, a que termine la otra transacción que está registrando el mismo pago.
-        $encontrado = cobro_de_pago_mp($pago, $aprobado);
-        // El mismo pago de débito puede llegar dos veces a la vez (Mercado Pago manda payment y
-        // subscription_authorized_payment). Ya con la otra transacción terminada, se vuelve a mirar si registró este pago,
-        // antes de darlo por huérfano o de intentar guardarlo en el cobro del mes siguiente. Tiene que ser una lectura común
-        // y venir después de esa espera: así su snapshot nace recién ahora y ve lo que la otra confirmó. Con candado
-        // (LOCK IN SHARE MODE) tomaría un candado de intervalo sobre uk_cobros_mp_payment y dos pagos distintos que se
-        // cruzaran se bloquearían entre sí al guardar su mp_payment_id (deadlock).
-        if ($aprobado && mp_pago_es_debito($pago)) {
-            $registrado = cobro_con_pago_mp($pago['id']);
-            if ($registrado !== null) {
-                return ['ya_pagado', $registrado, null, false];
-            }
+        $actual = $s['mp_preapproval_estado'];
+        if ($actual === $nuevo || $actual === 'cancelada' || ($nuevo === 'pendiente' && $actual !== null)) {
+            return 'sin_cambios';
         }
-        if ($encontrado === null) {
-            return $sinCobro(null, 'No se encontró el cobro del pago ' . $pago['id'] . ' (referencia "' . mb_substr($pago['referencia_externa'], 0, 60) . '")');
-        }
-        if (!$aprobado) {
-            if ($pago['status'] === 'rejected' && mp_pago_es_debito($pago)) {
-                aviso_registrar((int)$encontrado['id'], 'rechazo', 0);
-            }
-            return ['no_aprobado', $encontrado, null, false];
-        }
-        $cobro = q_one('SELECT * FROM cobros WHERE id = ? FOR UPDATE', [(int)$encontrado['id']]);
-        if ($cobro === null) {
-            return $sinCobro(null, 'No se encontró el cobro del pago ' . $pago['id']);
-        }
-        if ($cobro['estado'] === 'pagado') {
-            // En débito no puede pasar (la consulta con candado solo devuelve cobros pendientes): es un pago por link.
-            if ($cobro['mp_payment_id'] === $pago['id']) {
-                aviso_registrar((int)$cobro['id'], 'confirmacion', 0);
-                return ['ya_pagado', $cobro, null, false];
-            }
-            return ['ya_pagado', $cobro, "Pago {$pago['id']} recibido sobre un cobro ya pagado: revisá si hay que devolverlo", true];
-        }
-        if (mp_centavos($cobro['monto']) !== mp_centavos($pago['monto']) || strtoupper((string)$cobro['moneda']) !== $pago['moneda']) {
-            return ['monto_distinto', $cobro, sprintf(
-                'El monto o la moneda del pago %s (%s %s) no coincide con el cobro (%s %s): no se marcó como pagado',
-                $pago['id'], $pago['monto'] === null ? '?' : number_format($pago['monto'], 2, '.', ''), $pago['moneda'] ?: '?',
-                $cobro['monto'], $cobro['moneda']
-            ), true];
-        }
-        crud_update('cobros', (int)$cobro['id'], [
-            'estado' => 'pagado',
-            'fecha_pago' => hoy(),
-            'metodo_pago' => mp_pago_es_debito($pago) ? 'Mercado Pago · débito' : 'Mercado Pago · link',
-            'mp_payment_id' => $pago['id'],
-        ]);
-        aviso_registrar((int)$cobro['id'], 'confirmacion', 0);
-        return ['pagado', crud_find('cobros', (int)$cobro['id']), null, false];
+        $cambios = match ($nuevo) {
+            'autorizada' => ['mp_preapproval_estado' => 'autorizada', 'modalidad' => 'debito', 'pausada' => 0],
+            'pausada' => ['mp_preapproval_estado' => 'pausada', 'pausada' => 1],
+            'pendiente' => ['mp_preapproval_estado' => 'pendiente'],
+            'cancelada' => in_array($actual, ['autorizada', 'pausada'], true)
+                ? ['mp_preapproval_estado' => 'cancelada', 'modalidad' => 'transferencia', 'pausada' => 0]
+                : ['mp_preapproval_estado' => 'cancelada'],
+        };
+        $avisar = $nuevo === 'cancelada' && in_array($actual, ['autorizada', 'pausada'], true);
+        crud_update('suscripciones_cliente', $id, $cambios);
+        return $nuevo;
     });
+    if ($avisar) {
+        suscripcion_avisar_baja($id, 'debito');
+    }
+    return $resultado;
+}
 
-    return [
-        'resultado' => $resultado,
-        'cobro_id' => $cobro === null ? null : (int)$cobro['id'],
-        'estado_pago' => $pago['status'],
-        'sin_cobro' => $sinCobro,
-        'error' => $error,
-    ];
+// ---- Registro del cobro --------------------------------------------------------------------------------------------
+
+/**
+ * La suscripción a la que corresponde un pago ya normalizado, sin adivinar: por el preapproval del pago y, si ese no es
+ * nuestro (por ejemplo un cobro del preapproval anterior a una reactivación), por la referencia 'susc-{id}' que arma
+ * mp_crear_preapproval. Cualquier otra cosa no se asigna a nada.
+ *
+ * @return array{id: int, moneda: string}|null
+ */
+function mp_suscripcion_de_pago(array $pago): ?array
+{
+    $s = null;
+    if ($pago['preapproval_id'] !== '') {
+        $s = q_one('SELECT id, moneda FROM suscripciones_cliente WHERE mp_preapproval_id = ?', [$pago['preapproval_id']]);
+    }
+    if ($s === null && preg_match('/^susc-(\d{1,10})$/', $pago['referencia_externa'], $m)) {
+        $s = q_one('SELECT id, moneda FROM suscripciones_cliente WHERE id = ? AND mp_preapproval_id IS NOT NULL', [(int)$m[1]]);
+    }
+    return $s === null ? null : ['id' => (int)$s['id'], 'moneda' => (string)$s['moneda']];
+}
+
+/**
+ * Registra un pago de Mercado Pago ya normalizado (mp_pago_normalizar). Solo uno aprobado avanza algo. El dinero entró, así
+ * que una suscripción cancelada o pausada igual se registra; lo que no se puede asignar (suscripción desconocida, sin monto o en otra
+ * moneda) no se descarta ni se inventa: queda marcado sin_cobro para revisarlo a mano.
+ *
+ * @return array{resultado: 'registrado'|'repetido'|'no_aprobado'|'sin_cobro', cobro_id: ?int, sin_cobro: bool, error: ?string}
+ */
+function mp_pago_registrar(array $pago): array
+{
+    $sinCobro = fn(string $error): array => ['resultado' => 'sin_cobro', 'cobro_id' => null, 'sin_cobro' => true, 'error' => $error];
+    if ($pago['status'] !== 'approved') {
+        return ['resultado' => 'no_aprobado', 'cobro_id' => null, 'sin_cobro' => false, 'error' => null];
+    }
+    $s = mp_suscripcion_de_pago($pago);
+    if ($s === null) {
+        return $sinCobro(sprintf(
+            'No se encontró la suscripción del pago %s (preapproval "%s", referencia "%s")',
+            $pago['id'], mb_substr($pago['preapproval_id'], 0, 40), mb_substr($pago['referencia_externa'], 0, 60)
+        ));
+    }
+    if ($pago['monto'] === null || $pago['monto'] <= 0) {
+        return $sinCobro("El pago {$pago['id']} no trae un monto válido");
+    }
+    if ($pago['moneda'] !== strtoupper($s['moneda'])) {
+        return $sinCobro(sprintf(
+            'El pago %s está en %s pero la suscripción cobra en %s: no se registró',
+            $pago['id'], $pago['moneda'] ?: '?', $s['moneda']
+        ));
+    }
+    $r = suscripcion_registrar_pago($s['id'], [
+        'meses' => 1,
+        'monto' => number_format($pago['monto'], 2, '.', ''),
+        'moneda' => $s['moneda'],
+        'metodo_pago' => 'Mercado Pago · débito',
+        'mp_payment_id' => $pago['id'],
+        'avance' => 'fecha',
+    ]);
+    return ['resultado' => $r['resultado'], 'cobro_id' => $r['cobro_id'], 'sin_cobro' => false, 'error' => null];
+}
+
+// ---- Sincronizar ---------------------------------------------------------------------------------------------------
+
+/**
+ * Pone al día una suscripción con su débito: lee su estado en Mercado Pago y registra los pagos aprobados que falten (los
+ * busca por la referencia 'susc-{id}', del más viejo al más nuevo). Hace lo mismo que el webhook, por el mismo camino, así que
+ * se puede correr las veces que haga falta. Reemplaza a una reconciliación por cron.
+ *
+ * @return array{estado: ?string, pagos: int} pagos = los que esta corrida registró (no los que ya estaban)
+ */
+function suscripcion_sincronizar(int $id): array
+{
+    $s = suscripciones_cliente_get($id);
+    if ($s['mp_preapproval_id'] === null) {
+        throw new HttpError(409, 'Esta suscripción no tiene un débito en Mercado Pago.');
+    }
+    try {
+        $remoto = mp_preapproval_normalizar(mp_obtener_preapproval((string)$s['mp_preapproval_id']));
+        $encontrados = mp_buscar_pagos('susc-' . $id);
+    } catch (RuntimeException $e) {
+        throw suscripcion_mp_error($e);
+    }
+    suscripcion_aplicar_preapproval($id, $remoto['status']);
+
+    $registrados = 0;
+    foreach (array_reverse($encontrados) as $crudo) {
+        $pago = mp_pago_normalizar(is_array($crudo) ? $crudo : []);
+        if ($pago['id'] !== '' && mp_pago_registrar($pago)['resultado'] === 'registrado') {
+            $registrados++;
+        }
+    }
+    return ['estado' => suscripciones_cliente_get($id)['mp_preapproval_estado'], 'pagos' => $registrados];
 }

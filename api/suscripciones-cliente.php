@@ -14,6 +14,7 @@ if (($_GET['accion'] ?? '') !== '') {
             'reanudar' => [fn(int $id) => suscripcion_cliente_pausar($id, false), 200],
             'cancelar' => ['suscripcion_cliente_cancelar', 200],
             'reactivar' => ['suscripcion_cliente_reactivar', 200],
+            'sincronizar' => ['suscripcion_sincronizar', 200],
         ];
         $accion = (string)$_GET['accion'];
         if (!isset($acciones[$accion])) {
