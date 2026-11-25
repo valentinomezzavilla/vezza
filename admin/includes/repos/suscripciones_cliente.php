@@ -101,6 +101,11 @@ function suscripcion_validar_modalidad(array $suscripcion, string $modalidad): v
     if ($suscripcion['moneda'] !== MONEDA_MP) {
         throw suscripcion_modalidad_error('El débito automático solo funciona en ' . MONEDA_MP . '. Dejá esta suscripción en transferencia.');
     }
+    // El débito cobra el monto de la suscripción todos los meses: con un plan anual cobraría el precio del año cada mes.
+    $frecuencia = q_val('SELECT frecuencia FROM planes WHERE id = ?', [(int)($suscripcion['plan_id'] ?? 0)]);
+    if ($frecuencia !== null && $frecuencia !== 'mensual') {
+        throw suscripcion_modalidad_error('El débito automático cobra todos los meses y este plan es anual. Dejá esta suscripción en transferencia.');
+    }
     $email = q_val('SELECT email FROM clientes WHERE id = ?', [(int)$suscripcion['cliente_id']]);
     if ($email === null || trim((string)$email) === '') {
         throw suscripcion_modalidad_error('El cliente no tiene un mail cargado. Cargalo para poder usar el débito automático.');

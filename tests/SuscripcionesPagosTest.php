@@ -211,9 +211,31 @@ final class SuscripcionesPagosTest extends DbTestCase
 
     public function test_fin_de_mes_con_el_debito(): void
     {
+        clock_set('2026-01-31');
         $s = $this->susc('2026-01-31');
         $this->assertSame('2026-02-28', suscripcion_registrar_pago($s['id'], $this->pagoMp('pago-1'))['fecha_proximo_cobro']);
         // La fecha ya quedó en 28 feb: el día original se pierde de acá en adelante (regla de sumar_periodo del repo).
         $this->assertSame('2026-03-28', suscripcion_registrar_pago($s['id'], $this->pagoMp('pago-2'))['fecha_proximo_cobro']);
+    }
+
+    public function test_un_debito_atrasado_por_meses_se_cuenta_desde_hoy(): void
+    {
+        // Hoy es 10 mar y el "pago hasta" quedó en enero: sumarle un mes lo dejaría en febrero, todavía vencido,
+        // aunque el cliente acaba de pagar. Se cuenta desde hoy.
+        $s = $this->susc('2026-01-15');
+
+        $r = suscripcion_registrar_pago($s['id'], $this->pagoMp('pago-1'));
+
+        $this->assertSame('2026-04-10', $r['fecha_proximo_cobro']);
+        $this->assertSame('al_dia', suscripciones_cliente_get($s['id'])['cobro_estado']);
+        $this->assertSame('2026-01-15', cobros_get($r['cobro_id'])['fecha_vencimiento'], 'El cobro conserva la fecha que venció');
+    }
+
+    public function test_un_debito_atrasado_justo_un_mes_conserva_el_calendario(): void
+    {
+        // Un mes después de la fecha cae exactamente hoy: no está atrasado por meses, sigue el calendario de Mercado Pago.
+        $s = $this->susc('2026-02-10');
+
+        $this->assertSame('2026-03-10', suscripcion_registrar_pago($s['id'], $this->pagoMp('pago-1'))['fecha_proximo_cobro']);
     }
 }

@@ -124,6 +124,20 @@ final class SuscripcionesCicloTest extends DbTestCase
         $this->assertSame([], $this->llamadas);
     }
 
+    public function test_el_debito_exige_un_plan_mensual(): void
+    {
+        // Mercado Pago cobraría el monto del plan (el de todo el año) cada mes.
+        $anual = planes_create(['nombre' => 'Hosting anual', 'monto' => '240000', 'moneda' => 'ARS', 'frecuencia' => 'anual']);
+        $s = $this->susc(['plan_id' => $anual['id']]);
+
+        $campos = $this->errores422(fn() => suscripcion_pasar_a_debito($s['id']));
+
+        $this->assertArrayHasKey('modalidad', $campos);
+        $this->assertStringContainsString('anual', $campos['modalidad']);
+        $this->assertSame([], $this->llamadas);
+        $this->assertNull($this->fila($s['id'])['mp_preapproval_id']);
+    }
+
     public function test_pasar_a_debito_en_usd_o_sin_mail_da_422_sin_llamar_a_mercado_pago(): void
     {
         $usd = planes_create(['nombre' => 'Dólares', 'monto' => '100', 'moneda' => 'USD', 'frecuencia' => 'mensual']);
