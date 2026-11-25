@@ -37,6 +37,20 @@
       Acceso.vista(id, c, acceso, () => cargarAcceso().catch(Panel.manejarError)));
   }
 
+  async function cargarSuscripcion() {
+    const { filas, debito_disponible: debitoDisponible } = await Panel.get('/api/suscripciones-mensuales', { cliente_id: id });
+    const recargar = () => cargarSuscripcion().catch(Panel.manejarError);
+    Panel.llenar(document.getElementById('suscripcion'),
+      el('div', { class: 'item-top' },
+        el('h2', { text: 'Suscripción' }),
+        Panel.boton('+ Nueva suscripción', async () => {
+          if (await Suscripciones.nueva({ cliente_id: String(id) })) recargar();
+        }, 'chico')),
+      filas.length
+        ? el('div', { class: 'lista' }, filas.map((s) => Suscripciones.ficha(s, recargar, debitoDisponible)))
+        : Panel.vacio('Este cliente no tiene una suscripción mensual.'));
+  }
+
   function tabEntidad(modulo, url, textoNuevo, textoVacio, extra = () => null) {
     return async function render(panel) {
       const items = await Panel.get(url, { cliente_id: id });
@@ -100,4 +114,5 @@
     .then(() => Panel.tabs(document.getElementById('pestanas'), TABS))
     .catch(Panel.manejarError);
   cargarAcceso().catch(Panel.manejarError);
+  cargarSuscripcion().catch(Panel.manejarError);
 })();

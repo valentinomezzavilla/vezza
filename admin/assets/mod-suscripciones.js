@@ -256,5 +256,29 @@ const Suscripciones = (() => {
         resto.length ? selector : null));
   }
 
-  return { acciones, ejecutar, item, nueva, badges, pagoHasta, ultimoPago, verLink };
+  const DEBITO = { pendiente: 'Pendiente de autorización', autorizada: 'Activo', pausada: 'Pausado', cancelada: 'Cancelado' };
+
+  /** Una suscripción para la ficha del cliente: todos los datos y todas las acciones a la vista (sin selector). */
+  function ficha(s, recargar, debitoDisponible = false) {
+    const dato = (label, valor) => el('div', {},
+      el('div', { class: 'stat-label', text: label }),
+      el('div', { text: valor }));
+    return el('div', { class: 'item' },
+      el('div', { class: 'item-top' },
+        el('span', { class: 'item-titulo', text: s.plan_nombre }),
+        el('span', { class: 'item-titulo', text: Panel.fmtMonto(s.monto, s.moneda) })),
+      el('div', { class: 'item-acciones' }, badges(s)),
+      el('div', { class: 'datos' },
+        dato('Pago hasta', pagoHasta(s).replace(/^Pago hasta /, '')),
+        dato('Débito automático', DEBITO[s.mp_preapproval_estado] ?? 'No tiene'),
+        dato('Último pago', ultimoPago(s).replace(/^Último pago: /, ''))),
+      s.debito_pendiente && s.mp_init_point
+        ? el('p', { class: 'item-sub' }, 'El cliente todavía no autorizó el débito. ',
+          el('a', { href: s.mp_init_point, target: '_blank', rel: 'noopener noreferrer', text: 'Abrir el link de alta' }))
+        : null,
+      el('div', { class: 'item-acciones seccion' },
+        acciones(s, debitoDisponible).map(([valor, texto]) => Panel.boton(texto, () => ejecutar(valor, s, recargar, debitoDisponible), 'chico'))));
+  }
+
+  return { acciones, ejecutar, item, ficha, nueva, badges, pagoHasta, ultimoPago, verLink };
 })();
