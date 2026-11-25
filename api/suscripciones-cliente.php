@@ -9,6 +9,11 @@ if (($_GET['accion'] ?? '') !== '') {
     api_run(function (): void {
         $acciones = [
             'pagar' => ['suscripcion_pago_manual', 201],
+            'debito' => [fn(int $id, array $cuerpo) => suscripcion_pasar_a_debito($id, ($cuerpo['inicio'] ?? '') !== '' ? (string)$cuerpo['inicio'] : null), 200],
+            'pausar' => [fn(int $id) => suscripcion_cliente_pausar($id, true), 200],
+            'reanudar' => [fn(int $id) => suscripcion_cliente_pausar($id, false), 200],
+            'cancelar' => ['suscripcion_cliente_cancelar', 200],
+            'reactivar' => ['suscripcion_cliente_reactivar', 200],
         ];
         $accion = (string)$_GET['accion'];
         if (!isset($acciones[$accion])) {
