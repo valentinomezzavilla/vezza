@@ -206,3 +206,43 @@ En el admin, abrí la ficha del cliente → **Acceso al portal** → **Invitar a
 ### Si un cliente se olvida la contraseña
 
 Puede pedir un link en `/clientes/recuperar` (vale 2 horas). Si no le llega, mandale una invitación nueva desde su ficha.
+
+## Cobro de suscripciones (Mercado Pago)
+
+Cada cliente puede pagar su suscripción mensual por **débito automático de Mercado Pago** (Mercado Pago cobra solo cada mes) o por transferencia, que se registra a mano con **Registrar pago**. No hay cron ni links de pago: el sistema solo escucha los avisos de Mercado Pago, y el estado de cada suscripción (al día, por vencer, vencido) se calcula desde su "pago hasta". Todo vive en el admin: ficha del cliente → **Suscripción**, **Cobros → Suscripciones mensuales** y **Planes** (`/admin/planes`). La landing y el portal no cambian.
+
+### Primer deploy
+
+1. **Hacé una copia de la base** (phpMyAdmin → Exportar) y aplicá la migración `003_pagos` desde `https://vezzadev.com/admin/migraciones` → **Aplicar migraciones**. Es aditiva (el código viejo sigue andando con el esquema nuevo), pero MySQL no la deshace si falla a la mitad: en ese caso se restaura la copia, no se vuelve a correr. Aplicala antes del push para que las pantallas nuevas encuentren sus tablas.
+2. **Mercado Pago.** En [Mercado Pago Developers](https://www.mercadopago.com.ar/developers/panel/app) creá una **aplicación propia de VEZZA**, distinta de la de vezzashop: una aplicación tiene una sola URL de webhook por modo (prueba y producción), así que no se puede compartir. *(A confirmar con Mercado Pago.)* En **Webhooks → Configurar notificaciones** cargá `https://vezzadev.com/api/mp-webhook` con los eventos **Planes y suscripciones** (`subscription_preapproval` y `subscription_authorized_payment`). Al guardar te da una **clave secreta**. Solo se aceptan avisos firmados: los IPN viejos sin firma devuelven 401.
+3. Agregá al `.env` del servidor (un nivel arriba de `public_html`):
+
+   ```dotenv
+   MP_ACCESS_TOKEN=APP_USR-...   # Credenciales → Access Token (de prueba primero, de producción después)
+   MP_WEBHOOK_SECRET=...         # la clave secreta del paso 2
+   ```
+
+   Sin `MP_ACCESS_TOKEN` el débito automático no se ofrece en el admin; registrar pagos a mano sigue funcionando.
+4. **Mails.** Importá o sumá el workflow de n8n que manda los dos avisos (cambio de precio y baja): ver `docs/n8n/README.md`. Sin él la app funciona igual: cada acción avisa en pantalla si el mail no salió.
+5. **No hay Cron Job que configurar.**
+6. Corré `scripts/verificar-panel.sh https://vezzadev.com` y confirmá `Todo OK`.
+
+### Antes de cobrarle a un cliente real
+
+Esto lo hacés vos, con tus credenciales de Mercado Pago; el código se probó con un Mercado Pago de mentira.
+
+1. Con credenciales y usuarios de **prueba** de Mercado Pago: creá una suscripción en ARS, **Pasar a débito**, copiá el link de alta, autorizalo con la tarjeta de prueba y comprobá que la suscripción pasa a **débito**, que llega el cobro y que el "pago hasta" avanza un mes.
+2. Probá un pago rechazado y una baja hecha desde la cuenta de Mercado Pago: la suscripción tiene que volver a **transferencia** (sigue activa) y el cliente recibe el mail `suscripcion_cancelada` con `motivo` `debito`.
+3. Confirmá lo que no se pudo verificar contra la documentación (todo vive en `admin/includes/mercadopago.php` y `admin/includes/repos/pagos_mp.php`):
+   - que la respuesta de crear la suscripción traiga `init_point`;
+   - si la baja se escribe `cancelled` o `canceled` (la app acepta las dos al leer, pero al cancelar manda `cancelled`);
+   - el valor para reactivar una suscripción pausada (`authorized`);
+   - que `PUT /preapproval` acepte cambiar el monto, también en una suscripción todavía pendiente de autorización;
+   - que `start_date` en el futuro difiera de verdad el primer cobro;
+   - la fórmula de la firma de los webhooks de suscripciones;
+   - que los pagos de un débito traigan la `external_reference` `susc-{id}` (de eso depende **Sincronizar**) y dónde viene el id de su suscripción.
+4. Hacé un **pago real de bajo monto** (por ejemplo `$100`) con una suscripción propia y comprobá que se refleja; recién entonces cargale el débito a un cliente real. Revisá el admin a 360 px de ancho en un celular.
+
+### Si algo no se refleja
+
+Abrí la ficha del cliente → **Suscripción** → **Sincronizar con Mercado Pago**: lee el estado del débito y registra los pagos aprobados que falten, por el mismo camino que el webhook (no duplica nada). Los avisos de pagos que no se pudieron asignar a ninguna suscripción quedan en la tabla `mp_notificaciones` con `sin_cobro = 1` y el motivo en `error`.
