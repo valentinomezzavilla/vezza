@@ -75,58 +75,6 @@ function mp_id_y_link(array $r, string $que): array
 }
 
 /**
- * Crea una preferencia de Checkout Pro para un cobro suelto (un pago único).
- * POST /checkout/preferences. $cobro: id, concepto, monto (moneda siempre ARS).
- *
- * La referencia externa lleva prefijo ('cobro-{id}'): los ids de cobros y de suscripciones son números de secuencias
- * independientes y sin prefijo un pago de una suscripción se confundiría con un cobro ajeno.
- *
- * Campos enviados: items[].title, items[].quantity, items[].unit_price (CONFIRMADO: title/quantity/unit_price en los
- * ejemplos de "Crear preferencia"; items[].currency_id CONFIRMADO solo como currencyId en los ejemplos de SDK),
- * payer.email, external_reference, notification_url, back_urls.{success,pending,failure}, auto_return='approved'
- * (back_urls y auto_return CONFIRMADOS en la página de update-preference; payer.email, external_reference y
- * notification_url UNCONFIRMED: no se pudo leer la referencia de creación).
- * Respuesta: id (CONFIRMADO), init_point (UNCONFIRMED en los docs leídos).
- *
- * @return array{id: string, init_point: string}
- */
-function mp_crear_preferencia(array $cobro, string $emailCliente): array
-{
-    $pagos = portal_url('/clientes/pagos');
-    $r = mp_request('POST', '/checkout/preferences', [
-        'items' => [[
-            'title' => (string)($cobro['concepto'] ?? '') !== '' ? (string)$cobro['concepto'] : 'Servicio VEZZA',
-            'quantity' => 1,
-            'unit_price' => (float)$cobro['monto'],
-            'currency_id' => 'ARS',
-        ]],
-        'payer' => ['email' => $emailCliente],
-        'external_reference' => 'cobro-' . $cobro['id'],
-        'notification_url' => portal_url('/api/mp-webhook'),
-        'back_urls' => ['success' => $pagos, 'pending' => $pagos, 'failure' => $pagos],
-        'auto_return' => 'approved',
-    ]);
-    return mp_id_y_link($r, 'la preferencia');
-}
-
-/**
- * Hace que una preferencia deje de poder pagarse (se usa cuando el cobro se marca pagado a mano).
- * PUT /checkout/preferences/{id} con expires=true y expiration_date_to=ahora (ISO 8601 con zona).
- *
- * El endpoint PUT existe y expires/expiration_date_from/expiration_date_to aparecen en sus ejemplos (CONFIRMADO),
- * pero la página no los describe: que expires + expiration_date_to=ahora alcance para invalidar el link, y que no
- * pida también expiration_date_from, es UNCONFIRMED. Los docs de "fecha de vencimiento" hablan de date_of_expiration,
- * que solo documentan para pagos offline. Probar en el sandbox.
- */
-function mp_invalidar_preferencia(string $id): void
-{
-    mp_request('PUT', '/checkout/preferences/' . rawurlencode($id), [
-        'expires' => true,
-        'expiration_date_to' => (new DateTimeImmutable('now'))->format('Y-m-d\TH:i:s.vP'),
-    ]);
-}
-
-/**
  * Un pago por id: GET /v1/payments/{id}. Interesan id, status, external_reference, transaction_amount (UNCONFIRMED:
  * no se pudo leer la referencia; los nombres son los que usa la API de pagos).
  */
@@ -153,33 +101,49 @@ function mp_buscar_pagos(string $referenciaExterna): array
 /**
  * Crea una suscripción sin plan asociado y con pago pendiente: el cliente la autoriza entrando a init_point.
  * POST /preapproval. $suscripcion: id, monto, moneda (por defecto ARS), plan_nombre (opcional, va de reason).
- * $inicio: fecha y hora ISO 8601 con zona (ej. '2026-11-05T00:00:00.000-03:00'), se manda tal cual.
+ * $inicio: fecha y hora ISO 8601 con zona (ver mp_inicio_iso), se manda tal cual; sin $inicio no se manda start_date y
+ * Mercado Pago cobra apenas el cliente autoriza.
  *
  * Campos enviados (CONFIRMADOS en el ejemplo de "suscripción sin plan, pago pendiente" y en la referencia de
  * creación): reason, external_reference, payer_email, back_url, status='pending', auto_recurring.{frequency,
  * frequency_type='months', start_date, transaction_amount, currency_id}. UNCONFIRMED: la respuesta (id, init_point;
  * no hay ejemplo de respuesta en lo leído) y que start_date acepte una fecha futura con ese formato exacto. No se
  * manda notification_url: la URL de avisos de las suscripciones se configura en el panel de la aplicación.
+ * back_url es la home: la landing no se toca y VEZZA no tiene una pantalla de "volver" para el cliente.
  *
  * @return array{id: string, init_point: string}
  */
-function mp_crear_preapproval(array $suscripcion, string $emailCliente, string $inicio): array
+function mp_crear_preapproval(array $suscripcion, string $emailCliente, ?string $inicio = null): array
 {
+    $recurrente = ['frequency' => 1, 'frequency_type' => 'months'];
+    if ($inicio !== null) {
+        $recurrente['start_date'] = $inicio;
+    }
+    $recurrente += [
+        'transaction_amount' => (float)$suscripcion['monto'],
+        'currency_id' => (string)($suscripcion['moneda'] ?? 'ARS') ?: 'ARS',
+    ];
     $r = mp_request('POST', '/preapproval', [
         'reason' => (string)($suscripcion['plan_nombre'] ?? '') !== '' ? (string)$suscripcion['plan_nombre'] : 'Suscripción VEZZA',
         'external_reference' => 'susc-' . $suscripcion['id'],
         'payer_email' => $emailCliente,
-        'back_url' => portal_url('/clientes/pagos'),
+        'back_url' => portal_url('/'),
         'status' => 'pending',
-        'auto_recurring' => [
-            'frequency' => 1,
-            'frequency_type' => 'months',
-            'start_date' => $inicio,
-            'transaction_amount' => (float)$suscripcion['monto'],
-            'currency_id' => (string)($suscripcion['moneda'] ?? 'ARS') ?: 'ARS',
-        ],
+        'auto_recurring' => $recurrente,
     ]);
     return mp_id_y_link($r, 'la suscripción');
+}
+
+/** Una fecha 'YYYY-MM-DD' como la pide start_date: al mediodía, hora de Argentina. */
+function mp_inicio_iso(string $fecha): string
+{
+    return $fecha . 'T12:00:00.000-03:00';
+}
+
+/** ¿Está encendido el débito automático? Hay token de Mercado Pago (o, en los tests, un transporte falso). */
+function mp_configurado(): bool
+{
+    return MercadoPago::$transporte !== null || env('MP_ACCESS_TOKEN') !== null;
 }
 
 /** Una suscripción por id: GET /preapproval/{id}. Interesan id, status, auto_recurring, external_reference (UNCONFIRMED: no se pudo leer la referencia). */

@@ -26,50 +26,58 @@ final class MercadoPagoTest extends TestCase
         };
     }
 
-    public function test_la_preferencia_lleva_el_id_del_cobro_como_referencia_externa(): void
+    public function test_ya_no_hay_preferencias_de_pago(): void
     {
-        env_set('PORTAL_URL', 'https://demo.test');
-        $this->transporte(['id' => '123-abc', 'init_point' => 'https://mp.test/pagar/123-abc', 'otro' => 'x']);
-
-        $r = mp_crear_preferencia(['id' => 42, 'concepto' => 'Hosting octubre', 'monto' => '1500.50'], 'ana@sol.com');
-
-        $this->assertSame(['id' => '123-abc', 'init_point' => 'https://mp.test/pagar/123-abc'], $r);
-        $this->assertCount(1, $this->llamadas);
-        [$metodo, $ruta, $cuerpo] = $this->llamadas[0];
-        $this->assertSame('POST', $metodo);
-        $this->assertSame('/checkout/preferences', $ruta);
-        $this->assertSame('cobro-42', $cuerpo['external_reference']);
-        $this->assertSame('https://demo.test/api/mp-webhook', $cuerpo['notification_url']);
-        $this->assertSame('ana@sol.com', $cuerpo['payer']['email']);
-        $this->assertSame('ARS', $cuerpo['items'][0]['currency_id']);
-        $this->assertSame(1500.5, $cuerpo['items'][0]['unit_price']);
-        $this->assertSame(1, $cuerpo['items'][0]['quantity']);
-        $this->assertSame('Hosting octubre', $cuerpo['items'][0]['title']);
-        $pagos = 'https://demo.test/clientes/pagos';
-        $this->assertSame(['success' => $pagos, 'pending' => $pagos, 'failure' => $pagos], $cuerpo['back_urls']);
+        $this->assertFalse(function_exists('mp_crear_preferencia'));
+        $this->assertFalse(function_exists('mp_invalidar_preferencia'));
     }
 
     public function test_una_respuesta_sin_init_point_lanza(): void
     {
-        $this->transporte(['id' => '123-abc']);
+        $this->transporte(['id' => 'pre-1']);
         $this->expectException(RuntimeException::class);
-        mp_crear_preferencia(['id' => 1, 'concepto' => 'x', 'monto' => '10'], 'ana@sol.com');
+        mp_crear_preapproval(['id' => 1, 'monto' => '10', 'moneda' => 'ARS'], 'ana@sol.com');
     }
 
-    public function test_invalidar_una_preferencia_la_vence_ahora(): void
+    public function test_el_preapproval_sin_inicio_no_manda_start_date(): void
     {
-        $this->transporte(['id' => 'pref-9']);
-        $antes = time();
+        $this->transporte(['id' => 'pre-1', 'init_point' => 'https://mp.test/suscribir/pre-1']);
 
-        mp_invalidar_preferencia('pref-9');
+        mp_crear_preapproval(['id' => 7, 'monto' => '25000.00', 'moneda' => 'ARS'], 'ana@sol.com');
 
-        [$metodo, $ruta, $cuerpo] = $this->llamadas[0];
-        $this->assertSame('PUT', $metodo);
-        $this->assertSame('/checkout/preferences/pref-9', $ruta);
-        $this->assertTrue($cuerpo['expires']);
-        $vence = strtotime($cuerpo['expiration_date_to']);
-        $this->assertGreaterThanOrEqual($antes - 1, $vence);
-        $this->assertLessThanOrEqual(time() + 1, $vence);
+        $auto = $this->llamadas[0][2]['auto_recurring'];
+        $this->assertArrayNotHasKey('start_date', $auto);
+        $this->assertSame(['frequency' => 1, 'frequency_type' => 'months', 'transaction_amount' => 25000.0, 'currency_id' => 'ARS'], $auto);
+    }
+
+    public function test_la_back_url_es_la_home(): void
+    {
+        env_set('PORTAL_URL', 'https://demo.test');
+        $this->transporte(['id' => 'pre-1', 'init_point' => 'https://mp.test/suscribir/pre-1']);
+
+        mp_crear_preapproval(['id' => 7, 'monto' => '25000.00', 'moneda' => 'ARS'], 'ana@sol.com');
+
+        $this->assertSame(portal_url('/'), $this->llamadas[0][2]['back_url']);
+        $this->assertSame('https://demo.test/', $this->llamadas[0][2]['back_url']);
+    }
+
+    public function test_mp_inicio_iso(): void
+    {
+        $this->assertSame('2026-12-05T12:00:00.000-03:00', mp_inicio_iso('2026-12-05'));
+    }
+
+    public function test_mp_configurado_sigue_al_token_o_al_transporte_de_prueba(): void
+    {
+        MercadoPago::$transporte = null;
+        env_set('MP_ACCESS_TOKEN', null);
+        $this->assertFalse(mp_configurado());
+
+        env_set('MP_ACCESS_TOKEN', 'TEST-token');
+        $this->assertTrue(mp_configurado());
+
+        env_set('MP_ACCESS_TOKEN', null);
+        $this->transporte();
+        $this->assertTrue(mp_configurado());
     }
 
     public function test_obtener_pago_pide_el_pago_por_id(): void
@@ -110,7 +118,6 @@ final class MercadoPagoTest extends TestCase
         $this->assertSame('ana@sol.com', $cuerpo['payer_email']);
         $this->assertSame('susc-7', $cuerpo['external_reference']);
         $this->assertSame('pending', $cuerpo['status']);
-        $this->assertSame('https://demo.test/clientes/pagos', $cuerpo['back_url']);
         $this->assertSame('Mantenimiento', $cuerpo['reason']);
         $this->assertSame(
             ['frequency' => 1, 'frequency_type' => 'months', 'start_date' => $inicio, 'transaction_amount' => 25000.0, 'currency_id' => 'ARS'],
