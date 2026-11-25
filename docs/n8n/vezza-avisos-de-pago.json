@@ -78,7 +78,10 @@
                         }
                     ]
                 },
-                "options": {}
+                "options": {
+                    "fallbackOutput": "extra",
+                    "renameFallbackOutput": "Otra plantilla"
+                }
             },
             "id": "a1b2c3d4-0002-4000-8000-000000000002",
             "name": "Según la plantilla",
@@ -153,6 +156,23 @@
                 820,
                 200
             ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "{\"ok\": false, \"error\": \"plantilla desconocida\"}",
+                "options": {
+                    "responseCode": 422
+                }
+            },
+            "id": "a1b2c3d4-0006-4000-8000-000000000006",
+            "name": "Rechazar plantilla desconocida",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                540,
+                520
+            ]
         }
     ],
     "connections": {
@@ -179,6 +199,13 @@
                 [
                     {
                         "node": "Mail · Suscripción cancelada",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Rechazar plantilla desconocida",
                         "type": "main",
                         "index": 0
                     }

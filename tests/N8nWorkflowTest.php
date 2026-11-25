@@ -49,6 +49,9 @@ final class N8nWorkflowTest extends TestCase
             }
         }
         $this->assertSame(['precio_cambiado', 'suscripcion_cancelada'], $plantillas);
+        // Una plantilla que no es de este workflow (invitación del portal, recuperación de clave...) no se queda sin respuesta:
+        // sale por la salida de reserva y se rechaza al toque, en vez de dejar a la app esperando hasta su límite de 25 s.
+        $this->assertSame('extra', $switch[0]['parameters']['options']['fallbackOutput'] ?? null);
     }
 
     public function test_hay_un_nodo_de_mail_por_plantilla_y_todos_responden(): void
@@ -56,15 +59,20 @@ final class N8nWorkflowTest extends TestCase
         $w = $this->workflow();
         $mails = $this->nodos('emailSend');
         $this->assertCount(2, $mails);
-        $this->assertCount(1, $this->nodos('respondToWebhook'));
+        $respuestas = $this->nodos('respondToWebhook');
+        $this->assertCount(2, $respuestas, 'Una respuesta 200 y una de rechazo');
+        $rechazos = array_values(array_filter($respuestas, fn(array $n) => ($n['parameters']['options']['responseCode'] ?? null) === 422));
+        $exitos = array_values(array_filter($respuestas, fn(array $n) => !isset($n['parameters']['options']['responseCode'])));
+        $this->assertCount(1, $rechazos);
+        $this->assertCount(1, $exitos);
 
         $switch = $this->nodos('switch')[0]['name'];
         $salidas = $w['connections'][$switch]['main'];
-        $this->assertCount(2, $salidas, 'El switch tiene que tener una salida por plantilla');
+        $this->assertCount(3, $salidas, 'El switch tiene una salida por plantilla y una para las que no conoce');
         $destinos = array_map(fn(array $s) => $s[0]['node'], $salidas);
-        $this->assertSame(array_column($mails, 'name'), $destinos);
+        $this->assertSame([...array_column($mails, 'name'), $rechazos[0]['name']], $destinos);
 
-        $respuesta = $this->nodos('respondToWebhook')[0]['name'];
+        $respuesta = $exitos[0]['name'];
         foreach ($mails as $mail) {
             $this->assertSame($respuesta, $w['connections'][$mail['name']]['main'][0][0]['node'], $mail['name'] . ' tiene que terminar en la respuesta');
             $this->assertSame('info@vezzadev.com', $this->soloMail($mail['parameters']['fromEmail']));

@@ -19,7 +19,7 @@ Hay dos caminos. El primero es el recomendado porque la app manda **todos** sus 
 1. En el nodo **Aviso de la app**, elegí la credencial *Header Auth* con el nombre `X-Webhook-Secret` y como valor el mismo `MAIL_WEBHOOK_SECRET` del `.env`.
 2. En los dos nodos de mail, elegí la credencial SMTP de `info@vezzadev.com` (la misma que ya usa el workflow del portal).
 3. Activá el workflow y copiá la URL de producción del webhook (`.../webhook/vezza-avisos-de-pago`).
-4. Esa URL tiene que ser la `MAIL_WEBHOOK_URL`. Como la app manda todos los mails al mismo lugar, el workflow del portal tiene que pasar a recibirlos por acá (o usar el camino A).
+4. Esa URL tiene que ser la `MAIL_WEBHOOK_URL`. Como la app manda **todos** sus mails al mismo lugar, si apuntás la variable acá las invitaciones y recuperaciones del portal dejan de salir: este workflow responde `422` a cualquier plantilla que no sea de las dos suyas (salida "Otra plantilla"), así que la app avisa enseguida "no se mandó" en vez de quedarse esperando. Para que sigan saliendo, el workflow del portal tiene que pasar a recibirlos por acá (o usá el camino A, que no tiene este problema).
 
 El archivo no trae secretos: solo referencias a credenciales por nombre.
 
