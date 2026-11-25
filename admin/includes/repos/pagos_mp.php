@@ -216,7 +216,8 @@ function suscripcion_aplicar_preapproval(int $id, string $statusMp): string
             return 'sin_cambios';
         }
         $cambios = match ($nuevo) {
-            'autorizada' => ['mp_preapproval_estado' => 'autorizada', 'modalidad' => 'debito', 'pausada' => 0],
+            // Un débito autorizado es una historia nueva: si más adelante se cae, se le avisa al cliente de nuevo.
+            'autorizada' => ['mp_preapproval_estado' => 'autorizada', 'modalidad' => 'debito', 'pausada' => 0, 'aviso_baja_enviado_en' => null],
             'pausada' => ['mp_preapproval_estado' => 'pausada', 'pausada' => 1],
             'pendiente' => ['mp_preapproval_estado' => 'pendiente'],
             'cancelada' => in_array($actual, ['autorizada', 'pausada'], true)

@@ -263,6 +263,78 @@ final class SuscripcionesCicloTest extends DbTestCase
         $this->assertSame([], $this->llamadas);
         $this->assertSame('cancelada', $r['suscripcion']['estado']);
         $this->assertNull($r['suscripcion']['mp_preapproval_estado']);
+        $this->assertSame(0, (int)$r['suscripcion']['debito_al_cancelar']);
+    }
+
+    public function test_cancelar_con_debito_vivo_deja_marcado_que_tenia_debito(): void
+    {
+        $s = $this->conDebito('autorizada');
+        $this->assertSame(1, (int)suscripcion_cliente_cancelar($s['id'])['suscripcion']['debito_al_cancelar']);
+    }
+
+    public function test_cancelar_con_un_debito_que_ya_se_habia_caido_no_lo_marca(): void
+    {
+        $s = $this->conDebito('cancelada');
+        $this->assertSame(0, (int)suscripcion_cliente_cancelar($s['id'])['suscripcion']['debito_al_cancelar']);
+        $this->assertSame([], $this->llamadas);
+    }
+
+    public function test_reactivar_no_crea_un_debito_que_ya_se_habia_caido(): void
+    {
+        // El débito se cayó hace tiempo (la suscripción siguió por transferencia) y después se da de baja y se reactiva:
+        // no hay que pedirle a nadie que vuelva a autorizar nada, ni siquiera si el cliente hoy no tiene mail.
+        $s = $this->conDebito('cancelada');
+        suscripcion_cliente_cancelar($s['id']);
+        clientes_update($this->cliente, ['email' => null]);
+        $this->llamadas = [];
+
+        $r = suscripcion_cliente_reactivar($s['id']);
+
+        $this->assertSame('activa', $r['estado']);
+        $this->assertSame('cancelada', $r['mp_preapproval_estado']);
+        $this->assertSame('pre-1', $r['mp_preapproval_id']);
+        $this->assertSame([], $this->llamadas);
+    }
+
+    public function test_reactivar_deja_de_pedir_el_debito_una_vez_reactivada(): void
+    {
+        $s = $this->conDebito('autorizada');
+        suscripcion_cliente_cancelar($s['id']);
+        $this->mpRespuesta = ['id' => 'pre-2', 'init_point' => 'https://mp.test/pre-2'];
+        $this->assertSame(0, (int)suscripcion_cliente_reactivar($s['id'])['debito_al_cancelar']);
+    }
+
+    public function test_no_se_puede_pausar_un_debito_pendiente_de_autorizacion(): void
+    {
+        // Pausar solo cambiaría la marca local: cuando el cliente autorice, Mercado Pago cobraría igual.
+        $s = $this->conDebito('pendiente');
+
+        $this->assertHttp(409, fn() => suscripcion_cliente_pausar($s['id'], true));
+
+        $this->assertSame(0, (int)$this->fila($s['id'])['pausada']);
+        $this->assertSame([], $this->llamadas);
+    }
+
+    public function test_no_se_puede_pasar_a_debito_con_el_cobro_pausado(): void
+    {
+        $s = $this->susc();
+        suscripcion_cliente_pausar($s['id'], true);
+
+        $this->assertHttp(409, fn() => suscripcion_pasar_a_debito($s['id']));
+
+        $this->assertSame([], $this->llamadas);
+        $this->assertNull($this->fila($s['id'])['mp_preapproval_id']);
+    }
+
+    public function test_pasar_a_debito_limpia_el_aviso_de_baja_anterior(): void
+    {
+        $s = $this->conDebito('cancelada');
+        crud_update('suscripciones_cliente', $s['id'], ['aviso_baja_enviado_en' => '2026-03-01 10:00:00']);
+        $this->mpRespuesta = ['id' => 'pre-2', 'init_point' => 'https://mp.test/pre-2'];
+
+        suscripcion_pasar_a_debito($s['id']);
+
+        $this->assertNull($this->fila($s['id'])['aviso_baja_enviado_en']);
     }
 
     public function test_si_mercado_pago_falla_al_cancelar_no_cambia_nada(): void

@@ -4,7 +4,8 @@
 -- suscripciones_cliente.fecha_proximo_cobro ("pago hasta"); no hay cobros generados de antemano ni links de pago.
 
 -- Cada suscripción guarda su propio monto y moneda (el precio del plan puede cambiar
--- sin tocar lo que ya se acordó) y cómo se le cobra.
+-- sin tocar lo que ya se acordó) y cómo se le cobra. debito_al_cancelar recuerda si al darla de baja tenía un débito vivo
+-- en Mercado Pago: solo en ese caso, al reactivarla, se le pide al cliente que autorice uno nuevo.
 ALTER TABLE suscripciones_cliente
   ADD COLUMN monto DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER plan_id,
   ADD COLUMN moneda CHAR(3) NOT NULL DEFAULT 'ARS' AFTER monto,
@@ -14,6 +15,7 @@ ALTER TABLE suscripciones_cliente
   ADD COLUMN mp_init_point VARCHAR(500) NULL AFTER mp_preapproval_estado,
   ADD COLUMN pausada TINYINT(1) NOT NULL DEFAULT 0 AFTER mp_init_point,
   ADD COLUMN aviso_baja_enviado_en DATETIME NULL AFTER pausada,
+  ADD COLUMN debito_al_cancelar TINYINT(1) NOT NULL DEFAULT 0 AFTER aviso_baja_enviado_en,
   ADD UNIQUE KEY uk_susc_cliente_preapproval (mp_preapproval_id);
 
 -- Las suscripciones que ya existen toman el precio y la moneda de su plan.

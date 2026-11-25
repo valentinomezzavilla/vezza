@@ -15,7 +15,7 @@ final class MigracionPagosTest extends DbTestCase
     public function test_las_columnas_nuevas_existen(): void
     {
         $esperadas = [
-            'suscripciones_cliente' => ['monto', 'moneda', 'modalidad', 'mp_preapproval_id', 'mp_preapproval_estado', 'mp_init_point', 'pausada', 'aviso_baja_enviado_en'],
+            'suscripciones_cliente' => ['monto', 'moneda', 'modalidad', 'mp_preapproval_id', 'mp_preapproval_estado', 'mp_init_point', 'pausada', 'aviso_baja_enviado_en', 'debito_al_cancelar'],
             'cobros' => ['suscripcion_cliente_id', 'mp_payment_id'],
             'mp_notificaciones' => ['id', 'tipo', 'recurso_id', 'payload', 'recibida_en', 'procesada_en', 'sin_cobro', 'error'],
             'suscripciones_precio_historial' => ['id', 'suscripcion_cliente_id', 'monto_anterior', 'monto_nuevo', 'moneda', 'creado_en', 'avisado_en'],

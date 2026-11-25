@@ -391,6 +391,39 @@ final class PagosMpTest extends DbTestCase
         $this->assertSame('1 de abril de 2026', $this->mails[0][2]['acceso_hasta']);
     }
 
+    public function test_una_baja_del_admin_manda_su_mail_aunque_el_debito_ya_haya_avisado(): void
+    {
+        $s = $this->debito('autorizada');
+        $this->ofrecerPreapproval('pre-1', 'cancelled');
+        $this->notificar('pre-1', 'subscription_preapproval'); // el débito se cae: mail "sigue activa"
+        $this->assertCount(1, $this->mails);
+
+        $r = suscripcion_cliente_cancelar($s); // meses después, el admin da de baja la suscripción
+
+        $this->assertSame('enviado', $r['aviso']);
+        $this->assertCount(2, $this->mails);
+        $this->assertSame('debito', $this->mails[0][2]['motivo']);
+        $this->assertSame('baja', $this->mails[1][2]['motivo']);
+    }
+
+    public function test_un_debito_nuevo_vuelve_a_avisar_si_se_cae_otra_vez(): void
+    {
+        $s = $this->debito('autorizada');
+        $this->ofrecerPreapproval('pre-1', 'cancelled');
+        $this->notificar('pre-1', 'subscription_preapproval');
+        $this->assertCount(1, $this->mails);
+
+        $this->mp['/preapproval'] = ['id' => 'pre-2', 'init_point' => 'https://mp.test/pre-2'];
+        suscripcion_pasar_a_debito($s);
+        $this->ofrecerPreapproval('pre-2', 'authorized');
+        $this->notificar('pre-2', 'subscription_preapproval');
+        $this->ofrecerPreapproval('pre-2', 'cancelled');
+        $this->notificar('pre-2', 'subscription_preapproval');
+
+        $this->assertCount(2, $this->mails);
+        $this->assertSame('transferencia', $this->fila($s)['modalidad']);
+    }
+
     public function test_aceptar_las_dos_ortografias_de_cancelado(): void
     {
         $this->assertSame('cancelada', mp_estado_preapproval('cancelled'));

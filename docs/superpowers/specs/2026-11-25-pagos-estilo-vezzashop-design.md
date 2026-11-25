@@ -107,8 +107,9 @@ Por suscripción. Guarda el monto, registra el historial y manda el mail `precio
 
 ### 6.7 Cancelar y reactivar
 - **Cancelar** (admin): cancela el preapproval en Mercado Pago, y recién entonces marca la suscripción `cancelada` con `fecha_baja`. Manda el mail `suscripcion_cancelada` una sola vez: "tu servicio sigue activo hasta {fecha_proximo_cobro}, podés reactivarlo cuando quieras". Si Mercado Pago falla, no cambia nada local.
-- **Reactivar**: crea un preapproval nuevo con `start_date` = `fecha_proximo_cobro` si todavía es futura (no se cobra de más); si ya venció, cobra al autorizar. Vuelve a pasar por el link de alta.
-- **Pausar y reanudar**: sincronizan el preapproval.
+- **Reactivar**: si al darla de baja tenía un débito vivo (`debito_al_cancelar`), crea un preapproval nuevo con `start_date` = `fecha_proximo_cobro` si todavía es futura (no se cobra de más); si ya venció, cobra al autorizar. Vuelve a pasar por el link de alta. Si no tenía un débito vivo (por ejemplo, se había caído antes), solo la reactiva.
+- **Pausar y reanudar**: sincronizan el preapproval. No se puede pausar un débito pendiente de autorización ni pasar a débito con el cobro pausado (Mercado Pago cobraría igual cuando el cliente autorice).
+- **Avisos de baja**: el mail del débito caído y el de la baja del admin son hechos distintos: una baja del admin siempre avisa (una sola vez, porque una segunda da 409), y un débito nuevo, al pasar a débito o al autorizarse, vuelve a habilitar el aviso si se cae otra vez.
 
 ### 6.8 Sincronizar
 Botón en la ficha: lee el preapproval y sus cobros recientes en Mercado Pago y aplica lo que falte por el mismo camino que el webhook. Reemplaza a la reconciliación por cron; es idempotente.

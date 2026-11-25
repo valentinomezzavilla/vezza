@@ -69,11 +69,17 @@ function suscripcion_pasar_a_debito(int $id, ?string $inicio = null): array
     if (in_array($s['mp_preapproval_estado'], DEBITO_EN_CURSO, true)) {
         throw new HttpError(409, 'Esta suscripción ya tiene un débito en curso.');
     }
+    if ((int)$s['pausada']) {
+        // Con el cobro pausado, apenas el cliente autorice Mercado Pago empezaría a cobrar igual.
+        throw new HttpError(409, 'El cobro está pausado. Reanudalo antes de pasar a débito.');
+    }
     $r = suscripcion_crear_debito($s, $inicio);
     crud_update('suscripciones_cliente', $id, [
         'mp_preapproval_id' => $r['id'],
         'mp_init_point' => $r['init_point'],
         'mp_preapproval_estado' => 'pendiente',
+        // Un débito nuevo es una historia nueva: si se vuelve a caer, se le avisa de nuevo al cliente.
+        'aviso_baja_enviado_en' => null,
     ]);
     return suscripciones_cliente_get($id);
 }
@@ -84,6 +90,10 @@ function suscripcion_cliente_pausar(int $id, bool $pausada): array
     $s = suscripciones_cliente_get($id);
     if ($s['estado'] === 'cancelada') {
         throw new HttpError(409, 'La suscripción está cancelada.');
+    }
+    if ($pausada && $s['mp_preapproval_estado'] === 'pendiente') {
+        // Pausar solo cambiaría la marca local: apenas el cliente autorice, Mercado Pago cobraría igual.
+        throw new HttpError(409, 'El débito todavía está pendiente de autorización. Pausá el cobro cuando el cliente autorice, o cancelá el débito.');
     }
     $cambios = ['pausada' => $pausada ? 1 : 0];
     if (in_array($s['mp_preapproval_estado'], ['autorizada', 'pausada'], true)) {
@@ -118,7 +128,13 @@ function suscripcion_cliente_cancelar(int $id): array
             throw suscripcion_mp_error($e);
         }
     }
-    $cambios = ['estado' => 'cancelada', 'fecha_baja' => hoy(), 'pausada' => 0, 'modalidad' => 'transferencia'];
+    // Una baja del admin es un hecho nuevo: se le avisa al cliente aunque ya se le haya avisado antes de que se cayó el débito.
+    // Una segunda baja no puede mandar un segundo mail: ya está cancelada y arriba da 409.
+    // debito_al_cancelar recuerda si había un débito vivo, que es lo único que se vuelve a pedir al reactivar.
+    $cambios = [
+        'estado' => 'cancelada', 'fecha_baja' => hoy(), 'pausada' => 0, 'modalidad' => 'transferencia',
+        'aviso_baja_enviado_en' => null, 'debito_al_cancelar' => $conDebito ? 1 : 0,
+    ];
     if ($conDebito) {
         $cambios['mp_preapproval_estado'] = 'cancelada';
     }
@@ -136,8 +152,10 @@ function suscripcion_cliente_reactivar(int $id): array
     if ($s['estado'] !== 'cancelada') {
         throw new HttpError(409, 'La suscripción no está cancelada.');
     }
-    $cambios = ['estado' => 'activa', 'fecha_baja' => null, 'pausada' => 0, 'aviso_baja_enviado_en' => null];
-    if ($s['mp_preapproval_id'] !== null) {
+    $cambios = ['estado' => 'activa', 'fecha_baja' => null, 'pausada' => 0, 'aviso_baja_enviado_en' => null, 'debito_al_cancelar' => 0];
+    // Solo se vuelve a pedir el débito si estaba vivo cuando se dio de baja. Un débito que se cayó antes (y la suscripción siguió
+    // por transferencia) no se pide de nuevo: nadie lo pidió y puede fallar por un mail o una moneda que ya no sirven.
+    if ((int)$s['debito_al_cancelar'] === 1) {
         $r = suscripcion_crear_debito($s, null);
         $cambios += ['mp_preapproval_id' => $r['id'], 'mp_init_point' => $r['init_point'], 'mp_preapproval_estado' => 'pendiente'];
     }
