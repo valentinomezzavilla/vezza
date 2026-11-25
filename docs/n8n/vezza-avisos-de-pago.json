@@ -1,0 +1,216 @@
+{
+    "name": "VEZZA · Avisos de pago",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "vezza-avisos-de-pago",
+                "authentication": "headerAuth",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "a1b2c3d4-0001-4000-8000-000000000001",
+            "name": "Aviso de la app",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                0,
+                200
+            ],
+            "webhookId": "a1b2c3d4-0001-4000-8000-0000000000a1",
+            "credentials": {
+                "httpHeaderAuth": {
+                    "name": "VEZZA · Secreto de mails"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 2
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "b1b2c3d4-0002-4000-8000-000000000001",
+                                        "leftValue": "={{ $json.body.plantilla }}",
+                                        "rightValue": "precio_cambiado",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "precio_cambiado"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 2
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "b1b2c3d4-0002-4000-8000-000000000002",
+                                        "leftValue": "={{ $json.body.plantilla }}",
+                                        "rightValue": "suscripcion_cancelada",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "suscripcion_cancelada"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "a1b2c3d4-0002-4000-8000-000000000002",
+            "name": "Según la plantilla",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.2,
+            "position": [
+                260,
+                200
+            ]
+        },
+        {
+            "parameters": {
+                "fromEmail": "VEZZA <info@vezzadev.com>",
+                "toEmail": "={{ $json.body.destino }}",
+                "subject": "=Cambió el precio de tu plan {{ $json.body.datos.plan }}",
+                "emailFormat": "text",
+                "text": "=Hola {{ $json.body.datos.nombre }},\n\nTe aviso que el precio de tu plan {{ $json.body.datos.plan }} pasa de {{ $json.body.datos.monto_anterior }} a {{ $json.body.datos.monto_nuevo }} por mes{{ $json.body.datos.desde ? ', desde tu próximo cobro (' + $json.body.datos.desde + ')' : '' }}.\n\nSi tenés alguna duda, respondé este mail y lo vemos.\n\nVEZZA",
+                "options": {
+                    "appendAttribution": false
+                }
+            },
+            "id": "a1b2c3d4-0003-4000-8000-000000000003",
+            "name": "Mail · Precio cambiado",
+            "type": "n8n-nodes-base.emailSend",
+            "typeVersion": 2.1,
+            "position": [
+                540,
+                100
+            ],
+            "credentials": {
+                "smtp": {
+                    "name": "SMTP info@vezzadev.com"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "fromEmail": "VEZZA <info@vezzadev.com>",
+                "toEmail": "={{ $json.body.destino }}",
+                "subject": "={{ $json.body.datos.motivo === 'debito' ? 'Se canceló el débito automático de tu plan ' : 'Di de baja tu plan ' }}{{ $json.body.datos.plan }}",
+                "emailFormat": "text",
+                "text": "=Hola {{ $json.body.datos.nombre }},\n\n{{ $json.body.datos.motivo === 'debito'\n  ? 'Se canceló el débito automático de tu plan ' + $json.body.datos.plan + ' en Mercado Pago (puede pasar si la tarjeta fue rechazada o si lo cancelaste desde tu cuenta). Tu suscripción sigue activa.'\n  : 'Di de baja tu plan ' + $json.body.datos.plan + ': no se te va a cobrar más.' }}\n\n{{ $json.body.datos.vencida\n  ? 'Tenés un pago pendiente: escribime y lo resolvemos.'\n  : 'Lo que ya pagaste sigue activo hasta el ' + $json.body.datos.acceso_hasta + '.' }}\n\n{{ $json.body.datos.motivo === 'debito'\n  ? 'Si querés volver al débito automático, escribime y te mando un link nuevo.'\n  : 'Si querés retomarlo, escribime y lo reactivo.' }}\n\nVEZZA",
+                "options": {
+                    "appendAttribution": false
+                }
+            },
+            "id": "a1b2c3d4-0004-4000-8000-000000000004",
+            "name": "Mail · Suscripción cancelada",
+            "type": "n8n-nodes-base.emailSend",
+            "typeVersion": 2.1,
+            "position": [
+                540,
+                320
+            ],
+            "credentials": {
+                "smtp": {
+                    "name": "SMTP info@vezzadev.com"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "{\"ok\": true}",
+                "options": {}
+            },
+            "id": "a1b2c3d4-0005-4000-8000-000000000005",
+            "name": "Responder 200",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                820,
+                200
+            ]
+        }
+    ],
+    "connections": {
+        "Aviso de la app": {
+            "main": [
+                [
+                    {
+                        "node": "Según la plantilla",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Según la plantilla": {
+            "main": [
+                [
+                    {
+                        "node": "Mail · Precio cambiado",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Mail · Suscripción cancelada",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Mail · Precio cambiado": {
+            "main": [
+                [
+                    {
+                        "node": "Responder 200",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Mail · Suscripción cancelada": {
+            "main": [
+                [
+                    {
+                        "node": "Responder 200",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": false,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "pinData": {}
+}
