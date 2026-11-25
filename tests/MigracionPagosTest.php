@@ -3,68 +3,77 @@ declare(strict_types=1);
 
 final class MigracionPagosTest extends DbTestCase
 {
+    /** @return list<string> */
+    private function columnasDe(string $tabla): array
+    {
+        return array_column(q_all(
+            'SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            [$tabla]
+        ), 'c');
+    }
+
     public function test_las_columnas_nuevas_existen(): void
     {
         $esperadas = [
-            'suscripciones_cliente' => ['monto', 'moneda', 'modalidad', 'mp_preapproval_id', 'mp_preapproval_estado', 'mp_init_point', 'pausada'],
-            'cobros' => ['suscripcion_cliente_id', 'periodo', 'mp_payment_id', 'mp_preference_id', 'link_pago'],
-            'mp_notificaciones' => ['id', 'tipo', 'recurso_id', 'payload', 'recibida_en', 'procesada_en', 'sin_cobro', 'error', 'cobro_id', 'estado_pago'],
-            'avisos_pago' => ['id', 'cobro_id', 'tipo', 'canal', 'numero', 'enviado_en', 'ok'],
+            'suscripciones_cliente' => ['monto', 'moneda', 'modalidad', 'mp_preapproval_id', 'mp_preapproval_estado', 'mp_init_point', 'pausada', 'aviso_baja_enviado_en'],
+            'cobros' => ['suscripcion_cliente_id', 'mp_payment_id'],
+            'mp_notificaciones' => ['id', 'tipo', 'recurso_id', 'payload', 'recibida_en', 'procesada_en', 'sin_cobro', 'error'],
             'suscripciones_precio_historial' => ['id', 'suscripcion_cliente_id', 'monto_anterior', 'monto_nuevo', 'moneda', 'creado_en', 'avisado_en'],
         ];
         foreach ($esperadas as $tabla => $columnas) {
-            $existentes = q_all(
-                'SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
-                [$tabla]
-            );
-            $existentes = array_column($existentes, 'c');
+            $existentes = $this->columnasDe($tabla);
             foreach ($columnas as $columna) {
                 $this->assertContains($columna, $existentes, "Falta la columna $tabla.$columna");
             }
         }
     }
 
-    public function test_no_se_puede_repetir_un_periodo_por_suscripcion(): void
+    public function test_ya_no_existen_los_links_ni_los_avisos(): void
+    {
+        foreach (['periodo', 'mp_preference_id', 'link_pago'] as $columna) {
+            $this->assertNotContains($columna, $this->columnasDe('cobros'), "cobros.$columna no debería existir");
+        }
+        foreach (['cobro_id', 'estado_pago'] as $columna) {
+            $this->assertNotContains($columna, $this->columnasDe('mp_notificaciones'), "mp_notificaciones.$columna no debería existir");
+        }
+        $this->assertSame(0, (int)q_val(
+            "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'avisos_pago'"
+        ), 'La tabla avisos_pago no debería existir');
+    }
+
+    public function test_la_modalidad_solo_admite_debito_y_transferencia(): void
+    {
+        $tipo = q_val(
+            "SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'suscripciones_cliente' AND COLUMN_NAME = 'modalidad'"
+        );
+        $this->assertSame("enum('debito','transferencia')", $tipo);
+    }
+
+    public function test_un_pago_de_mercado_pago_no_se_registra_dos_veces(): void
     {
         $s = $this->crearSuscripcion();
         $c = (int)q_val('SELECT cliente_id FROM suscripciones_cliente WHERE id = ?', [$s]);
 
-        // Sin suscripción ni período (cobros sueltos) se pueden repetir.
-        $this->crearCobro($c, null, null);
-        $this->crearCobro($c, null, null);
-
-        $this->crearCobro($c, $s, '2026-10');
-        $this->crearCobro($c, $s, '2026-11');
+        // Los cobros sin pago de Mercado Pago (nulo) se pueden repetir.
+        $this->crearCobro($c, $s, null);
+        $this->crearCobro($c, $s, null);
+        $this->crearCobro($c, $s, 'pago-1');
+        $this->crearCobro($c, $s, 'pago-2');
         $this->assertSame(4, (int)q_val('SELECT COUNT(*) FROM cobros WHERE cliente_id = ?', [$c]));
 
         $this->expectException(PDOException::class);
-        $this->crearCobro($c, $s, '2026-10');
+        $this->crearCobro($c, $s, 'pago-1');
     }
 
-    public function test_no_se_repite_un_aviso(): void
+    public function test_un_preapproval_no_se_repite(): void
     {
-        $s = $this->crearSuscripcion();
-        $c = (int)q_val('SELECT cliente_id FROM suscripciones_cliente WHERE id = ?', [$s]);
-        $cobro = $this->crearCobro($c, $s, '2026-10');
-
-        crud_insert('avisos_pago', ['cobro_id' => $cobro, 'tipo' => 'previo', 'canal' => 'mail', 'numero' => 0, 'ok' => 1]);
-        // Otro canal o otro número sí entra.
-        crud_insert('avisos_pago', ['cobro_id' => $cobro, 'tipo' => 'previo', 'canal' => 'whatsapp', 'numero' => 0, 'ok' => 1]);
-        crud_insert('avisos_pago', ['cobro_id' => $cobro, 'tipo' => 'vencido', 'canal' => 'mail', 'numero' => 1, 'ok' => 1]);
+        $a = $this->crearSuscripcion();
+        $b = $this->crearSuscripcion();
+        crud_update('suscripciones_cliente', $a, ['mp_preapproval_id' => 'pre-1']);
 
         $this->expectException(PDOException::class);
-        crud_insert('avisos_pago', ['cobro_id' => $cobro, 'tipo' => 'previo', 'canal' => 'mail', 'numero' => 0, 'ok' => 1]);
-    }
-
-    public function test_un_aviso_nace_sin_enviar(): void
-    {
-        $s = $this->crearSuscripcion();
-        $c = (int)q_val('SELECT cliente_id FROM suscripciones_cliente WHERE id = ?', [$s]);
-        $cobro = $this->crearCobro($c, $s, '2026-10');
-
-        $id = crud_insert('avisos_pago', ['cobro_id' => $cobro, 'tipo' => 'previo', 'canal' => 'mail']);
-
-        $this->assertSame(0, (int)q_val('SELECT ok FROM avisos_pago WHERE id = ?', [$id]));
+        crud_update('suscripciones_cliente', $b, ['mp_preapproval_id' => 'pre-1']);
     }
 
     public function test_las_suscripciones_existentes_copian_monto_y_moneda_del_plan(): void
@@ -88,25 +97,12 @@ final class MigracionPagosTest extends DbTestCase
     {
         $s = $this->crearSuscripcion();
         $c = (int)q_val('SELECT cliente_id FROM suscripciones_cliente WHERE id = ?', [$s]);
-        $cobro = $this->crearCobro($c, $s, '2026-10');
+        $cobro = $this->crearCobro($c, $s, 'pago-1');
 
         crud_delete('suscripciones_cliente', $s);
 
         $this->assertSame(1, (int)q_val('SELECT COUNT(*) FROM cobros WHERE id = ?', [$cobro]));
         $this->assertNull(q_val('SELECT suscripcion_cliente_id FROM cobros WHERE id = ?', [$cobro]));
-    }
-
-    public function test_borrar_un_cobro_deja_la_notificacion_sin_cobro(): void
-    {
-        $s = $this->crearSuscripcion();
-        $c = (int)q_val('SELECT cliente_id FROM suscripciones_cliente WHERE id = ?', [$s]);
-        $cobro = $this->crearCobro($c, $s, '2026-10');
-        $n = crud_insert('mp_notificaciones', ['tipo' => 'payment', 'recurso_id' => '123', 'payload' => '{}', 'cobro_id' => $cobro, 'estado_pago' => 'approved']);
-
-        crud_delete('cobros', $cobro);
-
-        $this->assertNull(q_val('SELECT cobro_id FROM mp_notificaciones WHERE id = ?', [$n]));
-        $this->assertSame('approved', q_val('SELECT estado_pago FROM mp_notificaciones WHERE id = ?', [$n]));
     }
 
     private function crearSuscripcion(): int
@@ -119,12 +115,12 @@ final class MigracionPagosTest extends DbTestCase
         ]);
     }
 
-    private function crearCobro(int $clienteId, ?int $suscripcionId, ?string $periodo): int
+    private function crearCobro(int $clienteId, ?int $suscripcionId, ?string $mpPaymentId): int
     {
         return crud_insert('cobros', [
             'cliente_id' => $clienteId,
             'suscripcion_cliente_id' => $suscripcionId,
-            'periodo' => $periodo,
+            'mp_payment_id' => $mpPaymentId,
             'monto' => '1000.00',
             'moneda' => 'ARS',
             'fecha_vencimiento' => '2026-10-10',

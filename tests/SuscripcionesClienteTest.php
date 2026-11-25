@@ -50,21 +50,6 @@ final class SuscripcionesClienteTest extends DbTestCase
         $this->assertSame('25000.00', suscripciones_cliente_get($s['id'])['monto']);
     }
 
-    public function test_debito_y_link_exigen_moneda_ars(): void
-    {
-        $usd = planes_create(['nombre' => 'Dólares', 'monto' => '100', 'moneda' => 'USD', 'frecuencia' => 'mensual']);
-        $this->assertArrayHasKey('modalidad', $this->errores422(fn() => $this->susc(['plan_id' => $usd['id'], 'modalidad' => 'link'])));
-        $this->assertSame('transferencia', $this->susc(['plan_id' => $usd['id'], 'modalidad' => 'transferencia'])['modalidad']);
-        $this->assertSame('link', $this->susc(['modalidad' => 'link'])['modalidad']);
-    }
-
-    public function test_debito_y_link_exigen_que_el_cliente_tenga_mail(): void
-    {
-        $sinMail = clientes_create(['nombre' => 'Sin mail'])['id'];
-        $this->assertArrayHasKey('modalidad', $this->errores422(fn() => $this->susc(['cliente_id' => $sinMail, 'modalidad' => 'link'])));
-        $this->assertSame('transferencia', $this->susc(['cliente_id' => $sinMail])['modalidad']);
-    }
-
     public function test_el_debito_no_se_pide_al_crear(): void
     {
         $campos = $this->errores422(fn() => $this->susc(['modalidad' => 'debito']));
@@ -78,22 +63,17 @@ final class SuscripcionesClienteTest extends DbTestCase
         $s = $this->susc();
         suscripcion_validar_modalidad($s, 'transferencia');
         suscripcion_validar_modalidad($s, 'debito');
-        suscripcion_validar_modalidad($s, 'link');
 
         $this->assertArrayHasKey('modalidad', $this->errores422(fn() => suscripcion_validar_modalidad($s, 'cripto')));
 
         $usd = $s;
         $usd['moneda'] = 'USD';
         suscripcion_validar_modalidad($usd, 'transferencia');
-        foreach (['debito', 'link'] as $modalidad) {
-            $this->assertArrayHasKey('modalidad', $this->errores422(fn() => suscripcion_validar_modalidad($usd, $modalidad)));
-        }
+        $this->assertArrayHasKey('modalidad', $this->errores422(fn() => suscripcion_validar_modalidad($usd, 'debito')));
 
         clientes_update($this->cliente, ['email' => null]);
         suscripcion_validar_modalidad($s, 'transferencia');
-        foreach (['debito', 'link'] as $modalidad) {
-            $this->assertArrayHasKey('modalidad', $this->errores422(fn() => suscripcion_validar_modalidad($s, $modalidad)));
-        }
+        $this->assertArrayHasKey('modalidad', $this->errores422(fn() => suscripcion_validar_modalidad($s, 'debito')));
     }
 
     public function test_fecha_proximo_cobro_es_obligatoria_para_suscripciones_activas(): void
@@ -118,7 +98,7 @@ final class SuscripcionesClienteTest extends DbTestCase
         $otro = clientes_create(['nombre' => 'Otro'])['id'];
         $s = $this->susc();
         $u = suscripciones_cliente_update($s['id'], [
-            'cliente_id' => $otro, 'modalidad' => 'link', 'pausada' => 1, 'estado' => 'cancelada',
+            'cliente_id' => $otro, 'modalidad' => 'debito', 'pausada' => 1, 'estado' => 'cancelada',
             'mp_preapproval_id' => 'abc', 'mp_preapproval_estado' => 'autorizada', 'mp_init_point' => 'https://mp.com/x',
             'monto' => '30000',
         ]);
@@ -142,14 +122,6 @@ final class SuscripcionesClienteTest extends DbTestCase
         $this->assertSame('90.00', suscripciones_cliente_update($s['id'], ['plan_id' => $this->plan['id'], 'monto' => '90'])['monto']);
     }
 
-    public function test_cambiar_a_un_plan_en_otra_moneda_respeta_la_modalidad_de_cobro(): void
-    {
-        $usd = planes_create(['nombre' => 'Dólares', 'monto' => '100', 'moneda' => 'USD', 'frecuencia' => 'mensual']);
-        $s = $this->susc(['modalidad' => 'link']);
-        $this->assertArrayHasKey('modalidad', $this->errores422(fn() => suscripciones_cliente_update($s['id'], ['plan_id' => $usd['id']])));
-        $this->assertSame('ARS', suscripciones_cliente_get($s['id'])['moneda']);
-    }
-
     public function test_listar_filtra_por_cliente(): void
     {
         $otro = clientes_create(['nombre' => 'Otro'])['id'];
@@ -171,7 +143,7 @@ final class SuscripcionesClienteTest extends DbTestCase
     {
         $s = $this->susc();
         $cobroId = crud_insert('cobros', [
-            'cliente_id' => $this->cliente, 'suscripcion_cliente_id' => $s['id'], 'periodo' => '2026-04',
+            'cliente_id' => $this->cliente, 'suscripcion_cliente_id' => $s['id'], 'mp_payment_id' => 'pago-1',
             'monto' => '25000', 'moneda' => 'ARS', 'fecha_vencimiento' => '2026-04-01',
         ]);
         suscripciones_cliente_delete($s['id']);
