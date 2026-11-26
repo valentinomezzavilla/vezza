@@ -324,31 +324,26 @@
   }
 
   /* ---------- 6. VEZZA Shop: el video que corresponde al ancho ----------
-     El CSS decide el formato (--shop-format en .shop__frame: 9x16, 4x5, 1x1 o
-     16x9). Acá se elige el archivo y se descarga recién cuando el video se
-     acerca a la pantalla. Con "reducir movimiento" o ahorro de datos no
-     arranca solo: queda el póster y la persona toca "Reproducir".
-     "Pantalla completa" abre el reproductor del navegador con sus controles
-     y elige el formato más parecido a la forma de la pantalla.             */
+     Es un reproductor común, con los controles del navegador (play, tiempo,
+     pantalla completa). El CSS decide el formato (--shop-format en
+     .shop__frame: 9x16, 4x5, 1x1 o 16x9) y acá se elige el archivo; el <video>
+     trae preload="none", así que no baja nada hasta que se reproduce.
+     Arranca solo, mudo, cuando se ve (salvo con "reducir movimiento" o ahorro
+     de datos: ahí queda el póster y la persona toca play). En pantalla completa
+     elige el formato más parecido a la forma de la pantalla.               */
   function initShopVideo() {
     var frame = document.querySelector('[data-shop] .shop__frame');
     var video = frame && frame.querySelector('[data-shop-video]');
-    var toggle = frame && frame.querySelector('[data-shop-toggle]');
-    var expand = frame && frame.querySelector('[data-shop-expand]');
-    if (!video || !toggle) return;
+    if (!video) return;
 
     var RATIOS = { '9x16': 9 / 16, '4x5': 4 / 5, '1x1': 1, '16x9': 16 / 9 };   // ancho / alto de cada video
     var version = frame.getAttribute('data-version') || '1';
     var current = '';         // formato del póster / video que tiene el <video>
-    var hasSrc = false;       // ya se asignó un video (antes de eso no se descargó nada)
-    var userPaused = false;   // la persona lo pausó a mano
+    var userPaused = false;   // la persona lo pausó con los controles
     var autoPaused = false;   // se pausó solo porque salió de pantalla
+    var codePause = false;    // pausa pedida por este script (para no confundirla con la de la persona)
     var lastVisible = true;   // si el marco se ve (sin IntersectionObserver se da por visto)
 
-    function canFullscreen() {
-      var api = video.requestFullscreen || video.webkitRequestFullscreen || video.webkitEnterFullscreen;
-      return !!api && document.fullscreenEnabled !== false;
-    }
     function isFullscreen() {
       return (document.fullscreenElement || document.webkitFullscreenElement) === video;
     }
@@ -376,26 +371,21 @@
       var saveData = navigator.connection && navigator.connection.saveData;
       return !reduce && !saveData;
     }
-    function setLabel(playing) {
-      toggle.textContent = playing ? 'Pausar' : 'Reproducir';
-    }
-    function showControls(show) {
-      toggle.hidden = !show;
-      if (expand) expand.hidden = !show || !canFullscreen();
-    }
     function play() {
       var promise = video.play();
-      // Si el navegador bloquea el autoplay (ahorro de batería, por ejemplo), queda en "Reproducir"
-      if (promise && promise.catch) promise.catch(function () { setLabel(false); });
+      // Si el navegador bloquea el autoplay (ahorro de batería, por ejemplo), queda el póster con sus controles
+      if (promise && promise.catch) promise.catch(function () {});
+    }
+    function pause() {
+      codePause = true;
+      video.pause();
     }
 
-    // Cambia de formato: si ya había video, sigue en el mismo segundo (los cuatro duran lo mismo)
-    function load(fmt) {
-      var time = hasSrc ? video.currentTime : 0;
-      var resume = hasSrc && !video.paused;
+    // Cambia de formato: sigue en el mismo segundo (los cuatro duran lo mismo) y, si estaba reproduciendo, sigue
+    function setFormat(fmt) {
+      var time = video.currentTime;
+      var resume = !video.paused;
       current = fmt;
-      hasSrc = true;
-      showControls(true);
       video.poster = fileFor(fmt, 'jpg');
       video.src = fileFor(fmt, 'mp4');
       if (time) {
@@ -408,86 +398,34 @@
     }
     function syncFormat() {
       var fmt = currentFormat();
-      if (fmt === current) return;
-      if (hasSrc) {
-        load(fmt);
-      } else {
-        current = fmt;
-        video.poster = fileFor(fmt, 'jpg');
-      }
+      if (fmt !== current) setFormat(fmt);
     }
 
-    // Sin JS estos botones no existen: el póster del 16:9 y el enlace alcanzan
-    current = currentFormat();
-    video.poster = fileFor(current, 'jpg');
-    setLabel(false);
-    showControls(true);
+    // Sin JS el HTML ya es un reproductor común con el video 16:9; acá se ajusta al ancho
+    current = '16x9';
+    syncFormat();
 
-    video.addEventListener('play', function () { setLabel(true); });
-    video.addEventListener('pause', function () { setLabel(false); });
-    video.addEventListener('error', function () { showControls(false); });
-
-    toggle.addEventListener('click', function () {
-      if (!hasSrc) {
-        userPaused = false;
-        load(currentFormat());
-        play();
-      } else if (video.paused) {
-        userPaused = false;
-        autoPaused = false;
-        play();
-      } else {
-        userPaused = true;
-        video.pause();
-      }
+    // La persona pausa o reproduce con los controles del navegador
+    video.addEventListener('play', function () { userPaused = false; autoPaused = false; });
+    video.addEventListener('pause', function () {
+      if (codePause) { codePause = false; return; }
+      userPaused = true;
     });
 
     // Mientras no se ve, se pausa; al volver sigue, salvo que la persona lo haya pausado.
     // En pantalla completa no se toca: el marco puede quedar fuera de la vista sin que importe.
     function applyVisibility(visible) {
-      if (!hasSrc || isFullscreen()) return;
+      if (isFullscreen()) return;
       if (!visible) {
-        if (!video.paused) { autoPaused = true; video.pause(); }
+        if (!video.paused) { autoPaused = true; pause(); }
       } else if (autoPaused && !userPaused && autoplayAllowed()) {
         autoPaused = false;
         play();
       }
     }
 
-    function enterFullscreen() {
-      if (video.requestFullscreen) {
-        var promise = video.requestFullscreen();
-        if (promise && promise.catch) promise.catch(function () {});
-      } else if (video.webkitRequestFullscreen) {
-        video.webkitRequestFullscreen();
-      } else if (video.webkitEnterFullscreen) {
-        // iPhone: reproductor nativo, que necesita los metadatos ya cargados
-        if (video.readyState >= 1) {
-          video.webkitEnterFullscreen();
-        } else {
-          video.addEventListener('loadedmetadata', function open() {
-            video.removeEventListener('loadedmetadata', open);
-            try { video.webkitEnterFullscreen(); } catch (e) {}
-          });
-        }
-      }
-    }
-
-    if (expand) {
-      expand.addEventListener('click', function () {
-        // En pantalla grande se mira andando, aunque venga pausado o sin cargar
-        if (!hasSrc) load(currentFormat());
-        userPaused = false;
-        autoPaused = false;
-        if (video.paused) play();
-        enterFullscreen();
-      });
-    }
-
     function onFullscreenChange() {
-      var full = isFullscreen();
-      video.controls = full;   // en pantalla completa, controles nativos: tiempo, pausa y salir
-      if (!full) applyVisibility(lastVisible);   // al salir, si el marco quedó fuera de la vista, se pausa
+      if (!isFullscreen()) applyVisibility(lastVisible);   // al salir, si el marco quedó fuera de la vista, se pausa
       syncFormat();
     }
     document.addEventListener('fullscreenchange', onFullscreenChange);
@@ -505,14 +443,12 @@
     }, { passive: true });
 
     function start() {
-      if (!autoplayAllowed()) return;
-      load(currentFormat());
-      play();
+      if (autoplayAllowed()) play();
     }
 
     if (!('IntersectionObserver' in window)) { start(); return; }
 
-    // Se descarga cuando se ve y se queda a la vista un instante (300 ms), una sola vez.
+    // Arranca cuando se ve y se queda a la vista un instante (300 ms), una sola vez.
     // Así no baja nada si la persona solo pasa de largo, por ejemplo con el scroll
     // suave de "Contanos tu idea" hasta el contacto.
     var dwell = 0;

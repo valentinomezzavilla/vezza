@@ -55,7 +55,7 @@ DirectoryIndex index.html
 # HTML: siempre se revalida (ves los cambios al instante).
 # CSS/JS: 1 año, porque index.html los pide con ?v=N. Subí N en cada cambio.
 # Imágenes, videos y fuentes: 1 año. Los videos y sus pósters se piden con ?v=N
-# (data-version de .shop__frame, en la fila E-commerce de index.html): subí N si cambiás un archivo.
+# (src y poster del <video> y data-version de .shop__frame, en la fila E-commerce de index.html): subí N si cambiás un archivo.
 <IfModule mod_expires.c>
   ExpiresActive On
   ExpiresDefault "access plus 1 month"

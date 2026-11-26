@@ -37,7 +37,7 @@ public_html/
 Los videos de la sección VEZZA Shop se arman desde `TIENDAS/` (que no se
 publica, está en `.gitignore`): recomprimí el original y dejá la copia en
 `assets/video/`. El navegador los guarda un año, así que si reemplazás uno,
-subí `data-version` en la fila E-commerce de `index.html` (`.shop__frame`).
+subí el `?v=` del `src` y del `poster` del `<video>` y el `data-version` de `.shop__frame`, en la fila E-commerce de `index.html`.
 
 **No subas** `imgs/`, que son las piezas originales de la marca y quedan solo
 como referencia, ni este `DEPLOY.md`. Si lo subís por error, `.htaccess`
