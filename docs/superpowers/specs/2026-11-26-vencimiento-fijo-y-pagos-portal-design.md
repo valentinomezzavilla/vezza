@@ -9,6 +9,7 @@ Se apoya en `2026-11-25-pagos-estilo-vezzashop-design.md` (planes, suscripciones
 1. Cada suscripción vence **un día fijo de cada mes**. El pago que vence ese día cubre ese mes (mes adelantado).
 2. El cliente paga **desde su portal** con Mercado Pago (tarjeta, dinero en cuenta o efectivo), por transferencia o activando el débito automático.
 3. **Cada pago registrado** le manda por mail un **comprobante no válido como factura**, que también puede imprimir desde el portal.
+4. Cada comprobante queda **registrado en los dos sistemas**: en VEZZA y en el sistema del cliente.
 
 ## 2. Decisiones del usuario (conversación del 2026-11-26)
 
@@ -19,6 +20,7 @@ Se apoya en `2026-11-25-pagos-estilo-vezzashop-design.md` (planes, suscripciones
 | Mes que cubre el pago | El del vencimiento: lo que vence el 10 de diciembre es diciembre. |
 | Medios en el portal | Mercado Pago, transferencia y débito automático. |
 | Comprobante | Mail con el comprobante armado + página imprimible en el portal. Sin PDF adjunto. |
+| Dónde queda registrado | En los dos sistemas: en VEZZA y en el sistema del cliente (por ejemplo, el de pesca). |
 
 ## 3. Vencimiento fijo
 
@@ -40,13 +42,25 @@ Se apoya en `2026-11-25-pagos-estilo-vezzashop-design.md` (planes, suscripciones
 ## 4. Comprobantes de pago
 
 - **Cada pago que entra por `suscripcion_registrar_pago`** (portal con Mercado Pago, débito, transferencia confirmada o "Registrar pago" del admin) emite un comprobante. Un aviso repetido del mismo pago no emite otro: se emite solo cuando el resultado es `registrado`.
-- Tabla `comprobantes`: `numero` correlativo único, `cobro_id` único, `cliente_id`, `emitido_en`, `destino`, `enviado_en`, `error`. Se muestra como `0001-00000042`.
+- Tabla `comprobantes`: `numero` correlativo único, `cobro_id` único, `cliente_id`, `emitido_en`, `destino`, `enviado_en`, `error`, `anulado_en`, `motivo_anulacion` y una **foto de su contenido** (`datos`, JSON: emisor, cliente, concepto, período, medio, monto). Se muestra como `0001-00000042`.
+- **Un comprobante emitido no cambia nunca ni se borra.** Lo que se muestra, se imprime y se copia al sistema del cliente sale de esa foto, no de los datos vivos: si después cambia el nombre del cliente o del plan, el comprobante sigue diciendo lo que decía. Si un pago se deshace (se borra el cobro o se vuelve a pendiente), su comprobante queda **anulado** con el motivo, y también se anula en el sistema del cliente.
 - **Contenido:** datos de VEZZA (`COMPROBANTE_EMISOR_NOMBRE`, `COMPROBANTE_EMISOR_CUIT` opcional, `COMPROBANTE_EMISOR_CONTACTO`), número, fecha, cliente, concepto (`Mantenimiento · diciembre 2026`), período cubierto (`5/12/2026 al 4/1/2027`), medio de pago, monto y la leyenda **"Comprobante no válido como factura"**.
 - **Mail:** plantilla nueva `comprobante_pago` por el webhook de n8n de siempre (`mail_enviar`), a la casilla del acceso al portal del cliente (`usuarios_cliente.email`) o, si no tiene acceso, a `clientes.email`. Se manda **después** de registrar el pago, fuera de la transacción: si n8n falla, el pago queda registrado igual y el comprobante queda con el error. En la ficha del cliente, cada pago muestra si el comprobante salió y tiene **Reenviar comprobante**.
 - **Página imprimible:** `/clientes/comprobante?n=0001-00000042` con la sesión del portal (solo los del propio cliente; uno ajeno da 404) y `/admin/comprobante?n=...` para el admin. Estilo de impresión propio: se imprime o se guarda como PDF desde el navegador.
 - **n8n:** se suma `comprobante_pago` al workflow "VEZZA · Mails del portal" (lista `PLANTILLAS`, validación y texto en `TEXTOS`), como se hizo con `precio_cambiado`.
 
-## 5. Portal de clientes: pagar
+## 5. Comprobantes en el sistema del cliente
+
+Cada sistema conectado (los de la sección Sistemas de la ficha, con su token) **guarda una copia de los comprobantes de su cliente en su propia base**, y los muestra en su módulo "Acceder a VEZZA".
+
+- **VEZZA no le manda nada al sistema: el sistema los pide.** `GET /api/sistema-comprobantes?desde={número}` (con el token de siempre) devuelve los comprobantes del cliente emitidos o anulados después de ese número o de esa fecha de cambio, con su foto de contenido. Así los sistemas no tienen que abrir ninguna entrada nueva a internet, y si un sistema estuvo apagado, al volver se pone al día solo.
+- **El sistema sincroniza** al arrancar, cada 6 horas y cada vez que alguien abre "Acceder a VEZZA". Guarda cada comprobante por número (si ya lo tiene, lo actualiza: solo puede cambiar a anulado), así que repetir la sincronización no duplica nada.
+- En el sistema, "Acceder a VEZZA" suma la lista **Comprobantes** (número, fecha, concepto, monto, anulado o no) y una vista imprimible de cada uno, igual a la del portal. **La lista sale de la base del sistema**, así que se ve aunque VEZZA no responda.
+- En VEZZA, la ficha del cliente muestra en cada sistema hasta qué comprobante tiene copiado (lo informa el sistema al pedir), para saber si alguno quedó atrás.
+- Los sistemas que todavía no tienen el módulo no reciben copia hasta que se les agrega: VEZZA guarda todos igual, y al conectarse por primera vez el sistema baja los anteriores.
+- En pesca: tabla `vezza_comprobantes` (migración Knex) con número, fecha, contenido, anulado; los ve solo el dueño, como el resto del módulo.
+
+## 6. Portal de clientes: pagar
 
 El inicio del portal (`/clientes`, hoy "Lo estamos terminando de armar") pasa a mostrar la cuenta del cliente:
 
@@ -71,38 +85,40 @@ El inicio del portal (`/clientes`, hoy "Lo estamos terminando de armar") pasa a 
 - **Activar débito automático** aparece si la suscripción está en transferencia, en ARS, con plan mensual y Mercado Pago configurado. Usa el mismo `suscripcion_pasar_a_debito` del admin, con el inicio en el próximo vencimiento, y lleva al cliente al alta de Mercado Pago. Desde ahí sigue como hoy: cada cobro aprobado llega por webhook, se registra y sale su comprobante.
 - La baja o la pausa del débito siguen siendo del admin.
 
-## 6. "Acceder a VEZZA" en los sistemas
+## 7. "Acceder a VEZZA" en los sistemas
 
 `/api/sistema-cuenta` suma el día de vencimiento y el link al portal. El módulo de cada sistema muestra "Vence el 5 de cada mes" y un botón **Pagar en el portal**. El sistema sigue sin cobrar nada por sí mismo.
 
-## 7. No objetivos
+## 8. No objetivos
 
 - Pagar cobros sueltos (no de suscripción) desde el portal. Se ven, pero se pagan como hoy. Se puede sumar después con el mismo flujo.
 - Factura electrónica (ARCA), PDF adjunto, cuotas con interés, otras monedas en Mercado Pago, pausar o cortar servicios por falta de pago, avisos automáticos antes del vencimiento.
 - Que el cliente cambie su día de vencimiento, su plan o se dé de baja desde el portal.
 
-## 8. Anti-objetivos (fallaría aunque funcione)
+## 9. Anti-objetivos (fallaría aunque funcione)
 
 - Dar por pagado algo que Mercado Pago no confirmó o una transferencia que el admin no confirmó.
 - Registrar dos veces el mismo pago o mandar dos comprobantes del mismo pago.
+- Que un comprobante cambie después de emitido, se borre, o que la copia del sistema del cliente diga algo distinto que la de VEZZA.
 - Que un cliente vea o pague la suscripción, el pago o el comprobante de otro.
 - Que la migración deje vencido a alguien que hoy está al día.
 - Que un fallo de n8n o de Mercado Pago deshaga o trabe un pago ya registrado.
 
-## 9. Variables nuevas
+## 10. Variables nuevas
 
 `TRANSFERENCIA_TITULAR`, `TRANSFERENCIA_CBU`, `TRANSFERENCIA_ALIAS`, `TRANSFERENCIA_BANCO`, `COMPROBANTE_EMISOR_NOMBRE`, `COMPROBANTE_EMISOR_CUIT` (opcional), `COMPROBANTE_EMISOR_CONTACTO`. Sin los datos de transferencia, el portal no ofrece ese medio. Sin `MP_ACCESS_TOKEN`, no ofrece Mercado Pago ni débito.
 
-## 10. Etapas (cada una se publica sola y deja todo andando)
+## 11. Etapas (cada una se publica sola y deja todo andando)
 
 1. **Vencimiento fijo:** migración 005, formulario de alta y edición, avance de los pagos y débito con día fijo.
-2. **Comprobantes:** tabla, numeración, mail, página imprimible, reenviar y plantilla en n8n. Desde acá ya salen comprobantes de los pagos que registrás vos y de los débitos.
-3. **Portal con la cuenta:** suscripciones, pendientes, últimos pagos y comprobantes, sin pagar todavía.
-4. **Pagar con Mercado Pago** (Checkout Pro y tema `payment` del webhook).
-5. **Transferencia informada** y su bandeja en el admin.
-6. **Débito desde el portal** y el botón "Pagar en el portal" de los sistemas.
+2. **Comprobantes:** tabla, numeración, foto del contenido, anulación, mail, página imprimible, reenviar y plantilla en n8n. Desde acá ya salen comprobantes de los pagos que registrás vos y de los débitos.
+3. **Copia en los sistemas:** `/api/sistema-comprobantes` en VEZZA, y en pesca la tabla, la sincronización y la lista en "Acceder a VEZZA". Después se replica en suelosur y parabrisas al agregarles el módulo.
+4. **Portal con la cuenta:** suscripciones, pendientes, últimos pagos y comprobantes, sin pagar todavía.
+5. **Pagar con Mercado Pago** (Checkout Pro y tema `payment` del webhook).
+6. **Transferencia informada** y su bandeja en el admin.
+7. **Débito desde el portal** y el botón "Pagar en el portal" de los sistemas.
 
-## 11. A confirmar con Mercado Pago
+## 12. A confirmar con Mercado Pago
 
 Desde la sesión en que se escribió este diseño no se pudo leer la documentación de Mercado Pago, así que estos nombres salen de lo conocido y se verifican antes de cobrar de verdad, con credenciales de prueba, como se hizo con el débito:
 - Preferencia: `items[].title/quantity/unit_price/currency_id`, `external_reference`, `notification_url`, `back_urls`, `auto_return`, `expiration_date_to` y que la respuesta traiga `init_point`.
@@ -110,9 +126,10 @@ Desde la sesión en que se escribió este diseño no se pudo leer la documentaci
 - Tema del webhook `payment` y los campos de `GET /v1/payments/{id}`: `status`, `external_reference`, `transaction_amount`, `currency_id`, `payment_type_id`.
 - Débito: `auto_recurring.billing_day` (rango 1 a 28) y si se puede cambiar con `PUT /preapproval/{id}`.
 
-## 12. Tests
+## 13. Tests
 
 - Vencimiento: alta con día por defecto (incluido el 29 al 31 → 28), primer vencimiento que no cae en el día, pago puntual, tardío, adelantado y de varios meses, cambio de día, migración (nadie queda vencido, las sin fecha siguen sin fecha).
-- Comprobantes: uno por pago registrado, ninguno por aviso repetido, numeración correlativa, destino (acceso al portal o mail del cliente), mail fallido que no deshace el pago, reenviar, página propia y ajena (404).
+- Comprobantes: foto del contenido que no cambia aunque cambien el cliente o el plan, anulación al deshacer un pago, uno por pago registrado, ninguno por aviso repetido, numeración correlativa, destino (acceso al portal o mail del cliente), mail fallido que no deshace el pago, reenviar, página propia y ajena (404).
+- Copia en los sistemas: un sistema solo recibe los de su cliente, `desde` trae solo lo nuevo y las anulaciones, sincronizar dos veces no duplica, la lista se ve con VEZZA caído, un token inválido no borra lo ya copiado.
 - Portal: aislamiento por cliente en cada endpoint, preferencia con el monto del servidor, webhook `payment` (aprobado, pendiente, monto distinto, repetido, referencia desconocida), transferencia informada (archivo, límite diario, confirmar, rechazar), débito desde el portal con las mismas validaciones del admin.
 - Los tests existentes siguen pasando.
