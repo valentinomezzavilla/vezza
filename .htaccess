@@ -120,6 +120,7 @@ DirectoryIndex index.html
   RewriteRule ^api/monitor/([0-9]+)/chequear$ api/monitor.php?id=$1&accion=chequear [L,QSA]
   RewriteRule ^api/sistemas/([0-9]+)/token$ api/sistemas.php?id=$1&accion=token [L,QSA]
   RewriteRule ^api/comprobantes-pago/([0-9]+)/reenviar$ api/comprobantes-pago.php?id=$1&accion=reenviar [L,QSA]
+  RewriteRule ^api/pagos-informados/([0-9]+)/(confirmar|rechazar|archivo)$ api/pagos-informados.php?id=$1&accion=$2 [L,QSA]
   RewriteRule ^api/([a-z-]+)/([0-9]+)$ api/$1.php?id=$2 [L,QSA]
   RewriteRule ^api/([a-z-]+)$ api/$1.php [L,QSA]
 </IfModule>

@@ -354,3 +354,17 @@ En el portal, cada suscripción activa en pesos tiene **Pagar $X con Mercado Pag
 2. En la aplicación de Mercado Pago de VEZZA, en **Webhooks**, sumá el evento **Pagos** (`payment`) a la misma URL `https://vezzadev.com/api/mp-webhook`.
 3. *A confirmar con credenciales de prueba* (no se pudo leer la documentación al programarlo; todo vive en `mp_crear_preferencia` y `mp_procesar_pago_portal`): los campos de la preferencia (`items`, `external_reference`, `notification_url`, `back_urls`, `auto_return`, `expiration_date_to`), que un pago en efectivo mande un segundo aviso al aprobarse y `payment_type_id` del pago.
 4. Probá con un usuario de prueba: pagar con tarjeta, pagar en efectivo, y que en los dos casos el vencimiento avance un mes y llegue el comprobante.
+
+### Por transferencia
+
+En el portal, **Pagar por transferencia** muestra los datos de tu cuenta y un formulario para que el cliente avise que transfirió (fecha, monto y comprobante). Un aviso no es un pago: aparece en **Cobros** y en la ficha del cliente, en **Transferencias informadas**, con **Confirmar** (registra el pago con la fecha y el monto informados, deja el archivo como comprobante del cobro y manda el comprobante de pago) o **Rechazar** (pide un motivo y se lo manda al cliente por mail, plantilla `pago_rechazado`, ya cargada en n8n).
+
+1. Aplicá la migración `009_pagos_informados`.
+2. Agregá al `.env` los datos de la cuenta (sin CBU ni alias, el portal no ofrece transferencia):
+
+   ```dotenv
+   TRANSFERENCIA_TITULAR=Nombre del titular
+   TRANSFERENCIA_BANCO=Banco o billetera
+   TRANSFERENCIA_ALIAS=tu.alias
+   TRANSFERENCIA_CBU=0000000000000000000000
+   ```

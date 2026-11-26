@@ -10,11 +10,12 @@ if ($id < 1 || !crud_exists('clientes', $id)) {
 }
 
 layout_start('Cliente', 'clientes', [
-    'mod-clientes.js', 'mod-procesos.js', 'mod-cobros.js', 'mod-fixs.js', 'mod-eventos.js', 'mod-acceso.js', 'mod-suscripciones.js', 'mod-sistemas.js', 'cliente.js',
+    'mod-clientes.js', 'mod-procesos.js', 'mod-cobros.js', 'mod-fixs.js', 'mod-eventos.js', 'mod-acceso.js', 'mod-suscripciones.js', 'mod-sistemas.js', 'mod-informados.js', 'cliente.js',
 ], ['cliente-id' => $id]);
 ?>
 <section id="ficha" class="card" aria-live="polite"></section>
 <section id="acceso" class="card seccion" aria-live="polite"></section>
+<section id="informados" class="card seccion" hidden></section>
 <section id="suscripcion" class="card seccion" aria-live="polite"></section>
 <section id="sistemas" class="card seccion" aria-live="polite"></section>
 <section id="pestanas" class="seccion"></section>

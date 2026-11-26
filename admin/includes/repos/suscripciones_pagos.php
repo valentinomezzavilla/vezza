@@ -34,7 +34,8 @@ function cobro_concepto_pago(string $plan, string $fecha, int $meses): string
  * Registra un pago de una suscripción: crea el cobro `pagado` y adelanta fecha_proximo_cobro. Es el único camino por el que
  * un pago entra, el manual y el de Mercado Pago, así que la idempotencia vive acá.
  *
- * $pago: meses (int), monto (string decimal), moneda, metodo_pago, mp_payment_id (?string), nota (?string, opcional).
+ * $pago: meses (int), monto (string decimal), moneda, metodo_pago, mp_payment_id (?string), nota (?string, opcional),
+ *   fecha_pago (?string, opcional: la de una transferencia informada; por defecto hoy).
  *
  * Vencimiento fijo: el pago cubre los meses que vencen desde fecha_proximo_cobro y la corre esos meses, siempre en el mismo día.
  * Nunca se cuenta desde hoy: pagar tarde no corre el día, y un cliente que debe tres meses y paga uno sigue debiendo dos. Sin
@@ -89,7 +90,7 @@ function suscripcion_registrar_pago_tx(int $suscripcionId, array $pago): array
             'monto' => $pago['monto'],
             'moneda' => $pago['moneda'],
             'fecha_vencimiento' => $vencimiento,
-            'fecha_pago' => $hoy,
+            'fecha_pago' => $pago['fecha_pago'] ?? $hoy,
             'estado' => 'pagado',
             'metodo_pago' => $pago['metodo_pago'],
             'mp_payment_id' => $mpPaymentId,

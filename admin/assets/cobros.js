@@ -55,6 +55,7 @@
     fCliente.append(...clientes.map((c) => el('option', { value: String(c.id), text: c.nombre })));
     fCliente.value = params.get('cliente_id') || '';
     tabs = Panel.tabs(document.getElementById('cobros'), TABS);
+    Informados.pintar(document.getElementById('informados'), null, () => tabs.activar(tabs.actual())).catch(Panel.manejarError);
     fCliente.addEventListener('change', () => {
       history.replaceState(null, '', location.pathname + Panel.qs({ cliente_id: fCliente.value }) + location.hash);
       tabs.activar(tabs.actual());

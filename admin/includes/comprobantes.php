@@ -29,9 +29,12 @@ function comprobante_borrar_archivo(?string $nombre): void
     }
 }
 
-function comprobante_guardar(int $cobroId, string $rutaTemporal, int $bytes): array
+/**
+ * Valida un archivo subido (PDF o imagen, hasta 5 MB, tipo detectado por su contenido) y lo guarda en la carpeta privada con un
+ * nombre al azar. Devuelve ese nombre. Lo usan el comprobante de un cobro y el de una transferencia informada desde el portal.
+ */
+function archivo_comprobante_guardar(string $rutaTemporal, int $bytes): string
 {
-    $cobro = crud_find('cobros', $cobroId);
     if ($bytes <= 0) {
         throw new HttpError(422, 'El archivo está vacío', ['archivo' => 'Está vacío']);
     }
@@ -49,6 +52,13 @@ function comprobante_guardar(int $cobroId, string $rutaTemporal, int $bytes): ar
     if (!$ok) {
         throw new RuntimeException('No se pudo guardar el comprobante');
     }
+    return $nombre;
+}
+
+function comprobante_guardar(int $cobroId, string $rutaTemporal, int $bytes): array
+{
+    $cobro = crud_find('cobros', $cobroId);
+    $nombre = archivo_comprobante_guardar($rutaTemporal, $bytes);
     db()->prepare('UPDATE cobros SET comprobante_archivo = ? WHERE id = ?')->execute([$nombre, $cobroId]);
     comprobante_borrar_archivo($cobro['comprobante_archivo']);
     return cobros_get($cobroId);
@@ -64,10 +74,14 @@ function comprobante_quitar(int $cobroId): void
 /** @return array{0:string,1:string,2:string} ruta, mime, extensión */
 function comprobante_archivo(int $cobroId): array
 {
-    $cobro = crud_find('cobros', $cobroId);
-    $nombre = $cobro['comprobante_archivo'];
+    return archivo_comprobante_ruta(crud_find('cobros', $cobroId)['comprobante_archivo'], 'Este cobro no tiene archivo');
+}
+
+/** @return array{0:string,1:string,2:string} ruta, mime, extensión de un archivo guardado por archivo_comprobante_guardar */
+function archivo_comprobante_ruta(?string $nombre, string $siNoHay = 'No hay archivo'): array
+{
     if ($nombre === null || !preg_match('/^[a-f0-9]{32}\.(pdf|jpg|png|webp)$/', $nombre, $m)) {
-        throw new HttpError(404, 'Este cobro no tiene archivo');
+        throw new HttpError(404, $siNoHay);
     }
     $ruta = uploads_dir() . '/' . $nombre;
     if (!is_file($ruta)) {

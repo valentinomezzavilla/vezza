@@ -138,4 +138,5 @@
   cargarAcceso().catch(Panel.manejarError);
   cargarSuscripcion().catch(Panel.manejarError);
   cargarSistemas().catch(Panel.manejarError);
+  Informados.pintar(document.getElementById('informados'), id, () => cargarSuscripcion().catch(Panel.manejarError)).catch(Panel.manejarError);
 })();

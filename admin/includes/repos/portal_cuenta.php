@@ -29,6 +29,8 @@ function portal_suscripciones(int $clienteId): array
             'proximo_vencimiento' => $s['fecha_proximo_cobro'],
             'cobro_estado' => $estado === 'activa' ? $e['estado'] : null,
             'cobro_dias' => $estado === 'activa' ? $e['dias'] : null,
+            // La última transferencia que informó y todavía no se confirmó (o null).
+            'transferencia_pendiente' => q_val("SELECT fecha FROM pagos_informados WHERE suscripcion_cliente_id = ? AND estado = 'pendiente' ORDER BY id DESC LIMIT 1", [(int)$s['id']]),
         ];
     }, q_all(
         "SELECT sc.*, p.nombre AS plan_nombre, p.descripcion AS plan_descripcion, p.frecuencia
@@ -150,10 +152,16 @@ function portal_acciones_pago(array $s): string
     }
     $csrf = '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">'
         . '<input type="hidden" name="suscripcion_id" value="' . (int)$s['id'] . '">';
+    if ($s['transferencia_pendiente'] !== null) {
+        $html .= '<span class="badge badge-warn">Transferencia del ' . e(fecha_corta_ar((string)$s['transferencia_pendiente'])) . ' informada: la estoy revisando</span>';
+    }
     if (portal_pago_mp_motivo($s) === null) {
         $html .= '<form method="post" action="/clientes/pagar">' . $csrf
             . '<button class="btn btn-primario" type="submit">Pagar ' . e(comprobante_monto_texto((string)$s['monto'], (string)$s['moneda']))
             . ' con Mercado Pago</button></form>';
+    }
+    if (portal_transferencia_motivo($s) === null) {
+        $html .= '<a class="btn" href="/clientes/transferencia?s=' . (int)$s['id'] . '">Pagar por transferencia</a>';
     }
     return $html;
 }
