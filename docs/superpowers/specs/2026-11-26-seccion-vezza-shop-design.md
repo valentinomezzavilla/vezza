@@ -23,6 +23,28 @@ Lo que cambió, como decisiones de quien lo construyó:
 - La carga diferida sigue funcionando sola: con la fila cerrada el video queda
   recortado y no se descarga ni se reproduce nada.
 
+## Addendum 2: botón "Pantalla completa"
+
+Junto a "Pausar" hay un botón "Pantalla completa" que abre el `<video>` en el
+reproductor nativo del navegador (`requestFullscreen`; en iPhone,
+`webkitEnterFullscreen`). Decisiones de quien lo construyó:
+
+- En pantalla completa se muestran los controles nativos (tiempo, pausa,
+  salir) y el video entero, sin recortar (`object-fit: contain`).
+- En pantalla completa el formato lo decide la **forma de la pantalla**
+  (el de proporción más parecida entre 9:16, 4:5, 1:1 y 16:9), no el corte de
+  ancho: una compu con la ventana angosta ve igual el 16:9. Al salir vuelve
+  al formato del ancho, en el mismo segundo.
+- Si el video estaba sin cargar (ahorro de datos, "reducir movimiento"), el
+  botón lo carga, lo reproduce y lo abre.
+- En pantalla completa no rige la pausa por salir de pantalla; al volver a la
+  página sí se aplica.
+- El botón no se muestra si el navegador no tiene la API, si el video falla o
+  sin JS.
+- Alternativa descartada por ahora: un visor propio (lightbox) con controles
+  a medida; el reproductor nativo da más con menos código, sobre todo en
+  celular.
+
 ## Intención
 
 VEZZA Shop (https://tiendas.vezzadev.com) es la plataforma de tiendas online

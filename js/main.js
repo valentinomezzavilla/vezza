@@ -327,20 +327,45 @@
      El CSS decide el formato (--shop-format en .shop__frame: 9x16, 4x5, 1x1 o
      16x9). Acá se elige el archivo y se descarga recién cuando el video se
      acerca a la pantalla. Con "reducir movimiento" o ahorro de datos no
-     arranca solo: queda el póster y la persona toca "Reproducir".          */
+     arranca solo: queda el póster y la persona toca "Reproducir".
+     "Pantalla completa" abre el reproductor del navegador con sus controles
+     y elige el formato más parecido a la forma de la pantalla.             */
   function initShopVideo() {
     var frame = document.querySelector('[data-shop] .shop__frame');
     var video = frame && frame.querySelector('[data-shop-video]');
     var toggle = frame && frame.querySelector('[data-shop-toggle]');
+    var expand = frame && frame.querySelector('[data-shop-expand]');
     if (!video || !toggle) return;
 
+    var RATIOS = { '9x16': 9 / 16, '4x5': 4 / 5, '1x1': 1, '16x9': 16 / 9 };   // ancho / alto de cada video
     var version = frame.getAttribute('data-version') || '1';
-    var current = '';        // formato del póster / video que tiene el <video>
-    var hasSrc = false;      // ya se asignó un video (antes de eso no se descargó nada)
-    var userPaused = false;  // la persona lo pausó a mano
-    var autoPaused = false;  // se pausó solo porque salió de pantalla
+    var current = '';         // formato del póster / video que tiene el <video>
+    var hasSrc = false;       // ya se asignó un video (antes de eso no se descargó nada)
+    var userPaused = false;   // la persona lo pausó a mano
+    var autoPaused = false;   // se pausó solo porque salió de pantalla
+    var lastVisible = true;   // si el marco se ve (sin IntersectionObserver se da por visto)
 
+    function canFullscreen() {
+      var api = video.requestFullscreen || video.webkitRequestFullscreen || video.webkitEnterFullscreen;
+      return !!api && document.fullscreenEnabled !== false;
+    }
+    function isFullscreen() {
+      return (document.fullscreenElement || document.webkitFullscreenElement) === video;
+    }
+    // El formato cuya forma más se parece a la de la pantalla
+    function formatForScreen() {
+      var ratio = window.innerWidth / window.innerHeight;
+      var best = '16x9';
+      var bestGap = Infinity;
+      Object.keys(RATIOS).forEach(function (fmt) {
+        var gap = Math.abs(Math.log(ratio / RATIOS[fmt]));
+        if (gap < bestGap) { best = fmt; bestGap = gap; }
+      });
+      return best;
+    }
     function currentFormat() {
+      // En pantalla completa manda la forma de la pantalla; si no, el corte de ancho del CSS
+      if (isFullscreen()) return formatForScreen();
       return getComputedStyle(frame).getPropertyValue('--shop-format').trim() || '16x9';
     }
     function fileFor(fmt, ext) {
@@ -354,6 +379,10 @@
     function setLabel(playing) {
       toggle.textContent = playing ? 'Pausar' : 'Reproducir';
     }
+    function showControls(show) {
+      toggle.hidden = !show;
+      if (expand) expand.hidden = !show || !canFullscreen();
+    }
     function play() {
       var promise = video.play();
       // Si el navegador bloquea el autoplay (ahorro de batería, por ejemplo), queda en "Reproducir"
@@ -366,7 +395,7 @@
       var resume = hasSrc && !video.paused;
       current = fmt;
       hasSrc = true;
-      toggle.hidden = false;
+      showControls(true);
       video.poster = fileFor(fmt, 'jpg');
       video.src = fileFor(fmt, 'mp4');
       if (time) {
@@ -377,16 +406,26 @@
       }
       if (resume) play();
     }
+    function syncFormat() {
+      var fmt = currentFormat();
+      if (fmt === current) return;
+      if (hasSrc) {
+        load(fmt);
+      } else {
+        current = fmt;
+        video.poster = fileFor(fmt, 'jpg');
+      }
+    }
 
-    // Sin JS este botón no existe: el póster del 16:9 y el enlace alcanzan
+    // Sin JS estos botones no existen: el póster del 16:9 y el enlace alcanzan
     current = currentFormat();
     video.poster = fileFor(current, 'jpg');
     setLabel(false);
-    toggle.hidden = false;
+    showControls(true);
 
     video.addEventListener('play', function () { setLabel(true); });
     video.addEventListener('pause', function () { setLabel(false); });
-    video.addEventListener('error', function () { toggle.hidden = true; });
+    video.addEventListener('error', function () { showControls(false); });
 
     toggle.addEventListener('click', function () {
       if (!hasSrc) {
@@ -403,6 +442,57 @@
       }
     });
 
+    // Mientras no se ve, se pausa; al volver sigue, salvo que la persona lo haya pausado.
+    // En pantalla completa no se toca: el marco puede quedar fuera de la vista sin que importe.
+    function applyVisibility(visible) {
+      if (!hasSrc || isFullscreen()) return;
+      if (!visible) {
+        if (!video.paused) { autoPaused = true; video.pause(); }
+      } else if (autoPaused && !userPaused && autoplayAllowed()) {
+        autoPaused = false;
+        play();
+      }
+    }
+
+    function enterFullscreen() {
+      if (video.requestFullscreen) {
+        var promise = video.requestFullscreen();
+        if (promise && promise.catch) promise.catch(function () {});
+      } else if (video.webkitRequestFullscreen) {
+        video.webkitRequestFullscreen();
+      } else if (video.webkitEnterFullscreen) {
+        // iPhone: reproductor nativo, que necesita los metadatos ya cargados
+        if (video.readyState >= 1) {
+          video.webkitEnterFullscreen();
+        } else {
+          video.addEventListener('loadedmetadata', function open() {
+            video.removeEventListener('loadedmetadata', open);
+            try { video.webkitEnterFullscreen(); } catch (e) {}
+          });
+        }
+      }
+    }
+
+    if (expand) {
+      expand.addEventListener('click', function () {
+        // En pantalla grande se mira andando, aunque venga pausado o sin cargar
+        if (!hasSrc) load(currentFormat());
+        userPaused = false;
+        autoPaused = false;
+        if (video.paused) play();
+        enterFullscreen();
+      });
+    }
+
+    function onFullscreenChange() {
+      var full = isFullscreen();
+      video.controls = full;   // en pantalla completa, controles nativos: tiempo, pausa y salir
+      if (!full) applyVisibility(lastVisible);   // al salir, si el marco quedó fuera de la vista, se pausa
+      syncFormat();
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
     // Cambio de ancho (rotar el celular, achicar la ventana): otro formato
     var resizing = false;
     window.addEventListener('resize', function () {
@@ -410,14 +500,7 @@
       resizing = true;
       requestAnimationFrame(function () {
         resizing = false;
-        var fmt = currentFormat();
-        if (fmt === current) return;
-        if (hasSrc) {
-          load(fmt);
-        } else {
-          current = fmt;
-          video.poster = fileFor(fmt, 'jpg');
-        }
+        syncFormat();
       });
     }, { passive: true });
 
@@ -440,16 +523,9 @@
     });
     near.observe(frame);
 
-    // Mientras no se ve, se pausa; al volver sigue, salvo que la persona lo haya pausado
     new IntersectionObserver(function (entries) {
-      var visible = entries[entries.length - 1].isIntersecting;
-      if (!hasSrc) return;
-      if (!visible) {
-        if (!video.paused) { autoPaused = true; video.pause(); }
-      } else if (autoPaused && !userPaused && autoplayAllowed()) {
-        autoPaused = false;
-        play();
-      }
+      lastVisible = entries[entries.length - 1].isIntersecting;
+      applyVisibility(lastVisible);
     }).observe(frame);
   }
 
