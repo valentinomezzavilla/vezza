@@ -139,11 +139,27 @@ final class MonitorTest extends DbTestCase
 
     public function test_ip_publica_rechaza_redes_privadas_y_reservadas(): void
     {
-        foreach (['8.8.8.8', '203.0.114.7', '2001:4860:4860::8888'] as $ok) {
+        // Una IPv4 pública escrita como IPv6 sigue siendo pública.
+        foreach (['8.8.8.8', '203.0.114.7', '2001:4860:4860::8888', '::ffff:8.8.8.8', '::ffff:808:808'] as $ok) {
             $this->assertTrue(monitor_ip_publica($ok), $ok);
         }
         foreach (['127.0.0.1', '10.0.0.5', '172.16.0.1', '192.168.1.10', '169.254.169.254', '0.0.0.0', '::1', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', 'no-es-ip'] as $malo) {
             $this->assertFalse(monitor_ip_publica($malo), $malo);
+        }
+    }
+
+    /** El filtro de PHP solo mira los rangos IPv6: una IPv4 privada escrita como IPv6 se colaba como "pública" (SSRF). */
+    public function test_ip_publica_rechaza_ipv4_privadas_escritas_como_ipv6(): void
+    {
+        $camufladas = [
+            '::ffff:127.0.0.1', '::ffff:7f00:1', '0:0:0:0:0:ffff:7f00:1', '::FFFF:7F00:1', // loopback, mapeada a IPv4
+            '::ffff:10.0.0.1', '::ffff:192.168.1.10', '::ffff:172.16.0.1',                  // redes privadas
+            '::ffff:169.254.169.254', '::ffff:a9fe:a9fe',                                    // metadatos de la nube
+            '::ffff:0.0.0.0',
+            '::127.0.0.1', '::7f00:1', '::10.0.0.1', '::a9fe:a9fe',                          // forma "compatible" (en desuso)
+        ];
+        foreach ($camufladas as $ip) {
+            $this->assertFalse(monitor_ip_publica($ip), $ip);
         }
     }
 

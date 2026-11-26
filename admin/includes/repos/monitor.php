@@ -84,7 +84,28 @@ function monitor_coherencia(array $f): array
 
 function monitor_ip_publica(string $ip): bool
 {
+    // El filtro de PHP solo conoce los rangos privados de IPv6: una IPv4 escrita como IPv6 (::ffff:127.0.0.1) la toma por
+    // pública, y el sistema igual la conecta a la IPv4. Por eso se la juzga como la IPv4 que lleva adentro.
+    $ip = monitor_ipv4_embebida($ip) ?? $ip;
     return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+}
+
+/**
+ * La IPv4 que lleva adentro una IPv6 "mapeada" (::ffff:a.b.c.d, en cualquier grafía) o "compatible" (::a.b.c.d, en desuso).
+ * @return ?string null si no es ninguna de las dos o no es una IP
+ */
+function monitor_ipv4_embebida(string $ip): ?string
+{
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false) {
+        return null;
+    }
+    $bin = inet_pton($ip);
+    if ($bin === false || strlen($bin) !== 16) {
+        return null;
+    }
+    $mapeada = str_starts_with($bin, str_repeat("\0", 10) . "\xff\xff");
+    $compatible = str_starts_with($bin, str_repeat("\0", 12));
+    return ($mapeada || $compatible) ? (inet_ntop(substr($bin, 12)) ?: null) : null;
 }
 
 function monitor_resolver(string $host): array
