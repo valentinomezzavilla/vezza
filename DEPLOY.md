@@ -196,7 +196,7 @@ Vive en el mismo repo y el mismo `public_html`. Es PHP plano más la misma base 
    MAIL_WEBHOOK_SECRET=un-secreto-largo-y-aleatorio
    ```
 
-   El secreto tiene que ser el mismo que usa el workflow de n8n "VEZZA · Mails del portal" (credencial *Portal VEZZA · Secreto del webhook de mails*, header `X-Webhook-Secret`). Ese workflow cubre las plantillas `invitacion`, `recuperacion`, `pago_confirmado` y `debito_rechazado`; si el portal empieza a mandar otra, hay que agregarla en el nodo *Validar y armar mail*. Sin `MAIL_WEBHOOK_URL` el portal funciona igual, pero los mails no salen: desde la ficha del cliente copiás el link de invitación y lo mandás por WhatsApp o Instagram.
+   El secreto tiene que ser el mismo que usa el workflow de n8n "VEZZA · Mails del portal" (credencial *Portal VEZZA · Secreto del webhook de mails*, header `X-Webhook-Secret`). Ese workflow cubre las plantillas `invitacion`, `recuperacion`, `pago_confirmado`, `debito_rechazado`, `precio_cambiado`, `suscripcion_cancelada` y `monitor_alerta`; si el portal empieza a mandar otra, hay que agregarla en el nodo *Validar y armar mail* (rechaza con 400 las que no conoce). Sin `MAIL_WEBHOOK_URL` el portal funciona igual, pero los mails no salen: desde la ficha del cliente copiás el link de invitación y lo mandás por WhatsApp o Instagram.
 3. Corré `scripts/verificar-portal.sh https://vezzadev.com` y confirmá `Todo OK`.
 
 ### Cómo dar acceso a un cliente
@@ -229,7 +229,7 @@ Los destinos tienen que ser públicos: el panel rechaza dominios que resuelvan a
    MONITOR_ALERTA_EMAIL=info@vezzadev.com
    ```
 
-   Usa el mismo webhook de n8n que los mails del portal (`MAIL_WEBHOOK_URL` y `MAIL_WEBHOOK_SECRET`). **Falta un paso en n8n:** el workflow "VEZZA · Mails del portal" tiene que aceptar la plantilla `monitor_alerta`. Le llega este JSON y alcanza con mandar `datos.asunto` como asunto:
+   Usa el mismo webhook de n8n que los mails del portal (`MAIL_WEBHOOK_URL` y `MAIL_WEBHOOK_SECRET`). El workflow "VEZZA · Mails del portal" ya acepta la plantilla `monitor_alerta` (usa `datos.asunto` como asunto y el botón siempre lleva a `/admin/monitor`). Le llega este JSON:
 
    ```json
    {
@@ -271,7 +271,7 @@ Cada cliente puede pagar su suscripción mensual por **débito automático de Me
    ```
 
    Sin `MP_ACCESS_TOKEN` el débito automático no se ofrece en el admin; registrar pagos a mano sigue funcionando.
-4. **Mails.** Importá o sumá el workflow de n8n que manda los dos avisos (cambio de precio y baja): ver `docs/n8n/README.md`. Sin él la app funciona igual: cada acción avisa en pantalla si el mail no salió.
+4. **Mails.** Los dos avisos (cambio de precio y baja) los manda el workflow "VEZZA · Mails del portal", que ya acepta `precio_cambiado` y `suscripcion_cancelada`: no hay que importar nada. Si algún día armás otro n8n, ver `docs/n8n/README.md`. Sin el workflow la app funciona igual: cada acción avisa en pantalla si el mail no salió.
 5. **No hay Cron Job que configurar.**
 6. Corré `scripts/verificar-panel.sh https://vezzadev.com` y confirmá `Todo OK`.
 

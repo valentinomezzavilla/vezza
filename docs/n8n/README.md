@@ -13,7 +13,7 @@ n8n **no decide nada**: la app decide cuándo avisar y arma los datos; el workfl
 
 Hay dos caminos. El primero es el recomendado porque la app manda **todos** sus mails a una sola URL (`MAIL_WEBHOOK_URL`).
 
-**A. Sumarlo al workflow de mails del portal (recomendado).** En n8n, abrí "VEZZA · Mails del portal" y agregá a su Switch dos salidas con las reglas `{{ $json.body.plantilla }}` igual a `precio_cambiado` y a `suscripcion_cancelada`. Copiá desde este JSON los dos nodos de mail y conectalos a esas salidas y a la respuesta. No hay que tocar `MAIL_WEBHOOK_URL`.
+**A. En el workflow de mails del portal (recomendado, ya hecho en el n8n de VEZZA).** "VEZZA · Mails del portal" no usa un Switch: valida y arma todos los mails en un solo nodo de código, *Validar y armar mail*, que ya conoce `precio_cambiado`, `suscripcion_cancelada` y también `monitor_alerta` (el aviso del monitor de servicios). Para sumar otra plantilla, agregala a la lista `PLANTILLAS`, validá sus datos en la rama `esAviso` y escribí su texto en `TEXTOS`. Los textos de este JSON son la referencia de lo que dicen los dos mails de suscripciones. No hay que tocar `MAIL_WEBHOOK_URL`.
 
 **B. Importarlo aparte.** *Workflows → Import from file* y elegí `vezza-avisos-de-pago.json`. Después de importar:
 1. En el nodo **Aviso de la app**, elegí la credencial *Header Auth* con el nombre `X-Webhook-Secret` y como valor el mismo `MAIL_WEBHOOK_SECRET` del `.env`.
