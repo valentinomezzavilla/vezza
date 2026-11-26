@@ -368,3 +368,11 @@ En el portal, **Pagar por transferencia** muestra los datos de tu cuenta y un fo
    TRANSFERENCIA_ALIAS=tu.alias
    TRANSFERENCIA_CBU=0000000000000000000000
    ```
+
+### Débito automático desde el portal
+
+Si Mercado Pago está configurado, cada suscripción mensual en pesos sin débito tiene **Activar débito automático** en el portal: hace lo mismo que **Pasar a débito** del admin (cobra el día de vencimiento, desde el próximo) y lleva al cliente a autorizarlo en Mercado Pago. Mientras no lo autorice, el portal le muestra **Terminar de autorizar el débito**. La pausa y la baja siguen siendo tuyas, desde el admin.
+
+### Botón "Pagar en el portal" en los sistemas
+
+`/api/sistema-cuenta` devuelve el link al portal y el día de vencimiento. En pesca, cada suscripción activa sin débito muestra **Pagar en el portal de VEZZA**: el sistema nunca cobra por sí mismo.

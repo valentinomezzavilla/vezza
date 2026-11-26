@@ -137,6 +137,7 @@ final class SistemasTest extends DbTestCase
             'pago_hasta' => '2026-03-15', 'cobro_estado' => 'por_vencer', 'cobro_dias' => 5,
         ]], $c['suscripciones']);
         $this->assertSame([['fecha' => '2026-02-14', 'concepto' => 'Febrero', 'monto' => '25000.00', 'moneda' => 'ARS', 'metodo' => 'Transferencia']], $c['pagos']);
+        $this->assertSame('https://vezzadev.com/clientes', $c['portal_url']);
         $this->assertSame([['concepto' => 'Cambio de diseño', 'monto' => '40000.00', 'moneda' => 'ARS', 'vencimiento' => '2026-03-20']], $c['pendientes']);
 
         $json = json_encode($cuerpo);

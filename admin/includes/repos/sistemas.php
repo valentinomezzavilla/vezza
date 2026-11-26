@@ -179,6 +179,8 @@ function sistema_cuenta(array $sistema): array
         'suscripciones' => $suscripciones,
         'pagos' => $pagos,
         'pendientes' => $pendientes,
+        // Donde el cliente paga: el sistema solo muestra el botón, nunca cobra por sí mismo.
+        'portal_url' => portal_url('/clientes'),
         'generado_en' => date(DATE_ATOM),
     ];
 }

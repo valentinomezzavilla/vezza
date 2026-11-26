@@ -17,5 +17,10 @@ body { padding: 0; }
 .aviso-ok { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
 .aviso-warn { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
 .aviso-danger { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
-.portal-datos-transferencia { display: grid; gap: 8px; margin: 12px 0; }
-.portal-datos-transferencia code { font-size: 1rem; user-select: all; word-break: break-all; }
+.portal-datos-transferencia { display: grid; gap: 10px; margin: 12px 0; }
+.portal-datos-transferencia dd { margin: 0; }
+.portal-datos-transferencia code { font: inherit; font-weight: 700; font-size: 1.0625rem; user-select: all; overflow-wrap: anywhere; }
+/* El monto de cada fila no se corta a la mitad; el concepto se acomoda al lado. */
+.portal-main .item-top .item-titulo:last-child:not(:first-child) { white-space: nowrap; }
+.portal-main .item-top .item-titulo:first-child { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.portal-revisando { flex-basis: 100%; margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-weight: 600; font-size: .875rem; }

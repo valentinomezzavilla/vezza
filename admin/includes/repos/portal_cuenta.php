@@ -153,7 +153,7 @@ function portal_acciones_pago(array $s): string
     $csrf = '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">'
         . '<input type="hidden" name="suscripcion_id" value="' . (int)$s['id'] . '">';
     if ($s['transferencia_pendiente'] !== null) {
-        $html .= '<span class="badge badge-warn">Transferencia del ' . e(fecha_corta_ar((string)$s['transferencia_pendiente'])) . ' informada: la estoy revisando</span>';
+        $html .= '<p class="portal-revisando">Transferencia del ' . e(fecha_corta_ar((string)$s['transferencia_pendiente'])) . ' informada: la estoy revisando.</p>';
     }
     if (portal_pago_mp_motivo($s) === null) {
         $html .= '<form method="post" action="/clientes/pagar">' . $csrf
@@ -162,6 +162,10 @@ function portal_acciones_pago(array $s): string
     }
     if (portal_transferencia_motivo($s) === null) {
         $html .= '<a class="btn" href="/clientes/transferencia?s=' . (int)$s['id'] . '">Pagar por transferencia</a>';
+    }
+    if (portal_debito_motivo($s) === null) {
+        $html .= '<form method="post" action="/clientes/debito">' . $csrf
+            . '<button class="btn" type="submit">Activar débito automático</button></form>';
     }
     return $html;
 }

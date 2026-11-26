@@ -146,3 +146,38 @@ function mp_procesar_pago_portal(string $id): array
     crud_update('pagos_portal', (int)$intento['id'], ['estado' => 'aprobado', 'mp_payment_id' => $pago['id'], 'actualizado_en' => date('Y-m-d H:i:s')]);
     return ['resultado' => $r['resultado'], 'cobro_id' => $r['cobro_id'], 'sin_cobro' => false, 'error' => null];
 }
+
+// ---- Débito automático desde el portal ---------------------------------------------------------------------------
+
+/** ¿Puede el cliente activar él mismo el débito de esta suscripción? Devuelve el motivo si no, o null si sí. */
+function portal_debito_motivo(array $s): ?string
+{
+    if (!mp_configurado()) {
+        return 'El débito automático todavía no está disponible.';
+    }
+    if ($s['estado'] !== 'activa') {
+        return 'Esta suscripción no está activa.';
+    }
+    if ($s['debito_activo'] || $s['debito_pendiente_link'] !== null) {
+        return 'Esta suscripción ya tiene un débito automático.';
+    }
+    if ($s['moneda'] !== MONEDA_MP || $s['frecuencia'] !== 'mensual') {
+        return 'El débito automático es solo para planes mensuales en pesos.';
+    }
+    return null;
+}
+
+/**
+ * Activa el débito automático desde el portal: lo mismo que "Pasar a débito" del admin (empieza a cobrar en el próximo vencimiento,
+ * el día fijo de cada mes) y devuelve el link de Mercado Pago para que el cliente lo autorice. Una suscripción ajena da 404.
+ */
+function portal_activar_debito(int $clienteId, int $suscripcionId): string
+{
+    $s = portal_suscripcion($clienteId, $suscripcionId);
+    $motivo = portal_debito_motivo($s);
+    if ($motivo !== null) {
+        throw new HttpError(409, $motivo);
+    }
+    $r = suscripcion_pasar_a_debito($suscripcionId);
+    return (string)$r['mp_init_point'];
+}

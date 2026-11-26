@@ -224,4 +224,37 @@ final class PagosPortalTest extends DbTestCase
         $this->assertSame('Mercado Pago · tarjeta de débito', mp_medio_texto('debit_card'));
         $this->assertSame('Mercado Pago · pago', mp_medio_texto('raro'));
     }
+
+    // ---- débito automático desde el portal ----
+
+    public function test_activar_el_debito_desde_el_portal_lleva_al_alta_de_mercado_pago(): void
+    {
+        $this->mp['/preapproval'] = ['id' => 'pre-9', 'init_point' => 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_id=pre-9'];
+        $s = $this->susc();
+        $this->assertStringContainsString('action="/clientes/debito"', portal_acciones_pago(portal_suscripcion($this->cliente, $s['id'])));
+
+        $link = portal_activar_debito($this->cliente, $s['id']);
+        $this->assertSame('https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_id=pre-9', $link);
+        $cuerpo = end($this->llamadas)[2];
+        $this->assertSame(5, $cuerpo['auto_recurring']['billing_day']);
+        $this->assertSame('2026-12-05T12:00:00.000-03:00', $cuerpo['auto_recurring']['start_date']);
+
+        $p = portal_suscripcion($this->cliente, $s['id']);
+        $this->assertSame($link, $p['debito_pendiente_link']);
+        $html = portal_acciones_pago($p);
+        $this->assertStringContainsString('Terminar de autorizar el débito', $html);
+        $this->assertStringNotContainsString('action="/clientes/debito"', $html);
+        $this->assertHttp(409, fn() => portal_activar_debito($this->cliente, $s['id']));
+    }
+
+    public function test_el_debito_no_se_ofrece_en_planes_anuales_ni_ajenos(): void
+    {
+        $anual = planes_create(['nombre' => 'Anual', 'monto' => '400000', 'moneda' => 'ARS', 'frecuencia' => 'anual']);
+        $s = $this->susc(['plan_id' => $anual['id']]);
+        $this->assertHttp(409, fn() => portal_activar_debito($this->cliente, $s['id']));
+        $otro = clientes_create(['nombre' => 'Otro', 'email' => 'otro@sol.com'])['id'];
+        $ajena = suscripciones_cliente_create(['cliente_id' => $otro, 'plan_id' => $this->plan['id'], 'fecha_proximo_cobro' => '2026-12-05']);
+        $this->assertHttp(404, fn() => portal_activar_debito($this->cliente, $ajena['id']));
+        $this->assertSame([], $this->llamadas);
+    }
 }

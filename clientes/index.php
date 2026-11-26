@@ -15,6 +15,8 @@ $avisos = [
     'debito' => ['ok', 'Listo: cuando Mercado Pago confirme el débito automático lo vas a ver acá.'],
     'no_mp' => ['danger', 'No pudimos iniciar el pago con Mercado Pago. Probá de nuevo en un rato o pagá por transferencia.'],
     'muchos' => ['warn', 'Iniciaste muchos pagos seguidos. Esperá un rato y probá de nuevo.'],
+    'no_debito' => ['danger', 'No pudimos activar el débito automático. Probá de nuevo en un rato.'],
+    'sin_mail_debito' => ['warn', 'Para activar el débito automático necesito un mail tuyo cargado. Escribime y lo cargo.'],
 ];
 $aviso = $avisos[is_string($_GET['aviso'] ?? null) ? $_GET['aviso'] : ''] ?? null;
 
