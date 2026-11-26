@@ -99,6 +99,11 @@ DirectoryIndex index.html
   RedirectMatch 404 (?i)^/(\.env|composer\.(json|lock)$|phpunit\.xml)
 </IfModule>
 
+# Los sistemas de los clientes mandan su token en Authorization: algunos PHP (CGI/FPM) no lo reciben si no se pasa a mano.
+<IfModule mod_setenvif.c>
+  SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteRule ^admin-login$ admin/login.php [L,QSA]
@@ -113,6 +118,7 @@ DirectoryIndex index.html
   RewriteRule ^api/reportes/balance$ api/reportes.php [L,QSA]
   RewriteRule ^api/monitor/chequear$ api/monitor.php?accion=chequear [L,QSA]
   RewriteRule ^api/monitor/([0-9]+)/chequear$ api/monitor.php?id=$1&accion=chequear [L,QSA]
+  RewriteRule ^api/sistemas/([0-9]+)/token$ api/sistemas.php?id=$1&accion=token [L,QSA]
   RewriteRule ^api/([a-z-]+)/([0-9]+)$ api/$1.php?id=$2 [L,QSA]
   RewriteRule ^api/([a-z-]+)$ api/$1.php [L,QSA]
 </IfModule>

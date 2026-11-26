@@ -51,6 +51,11 @@
         : Panel.vacio('Este cliente no tiene una suscripción mensual.'));
   }
 
+  async function cargarSistemas() {
+    const sistemas = await Panel.get('/api/sistemas', { cliente_id: id });
+    Panel.llenar(document.getElementById('sistemas'), Sistemas.vista(id, sistemas, () => cargarSistemas().catch(Panel.manejarError)));
+  }
+
   function tabEntidad(modulo, url, textoNuevo, textoVacio, extra = () => null) {
     return async function render(panel) {
       const items = await Panel.get(url, { cliente_id: id });
@@ -115,4 +120,5 @@
     .catch(Panel.manejarError);
   cargarAcceso().catch(Panel.manejarError);
   cargarSuscripcion().catch(Panel.manejarError);
+  cargarSistemas().catch(Panel.manejarError);
 })();

@@ -300,3 +300,18 @@ Esto lo hacés vos, con tus credenciales de Mercado Pago; el código se probó c
 ### Si algo no se refleja
 
 Abrí la ficha del cliente → **Suscripción** → **Sincronizar con Mercado Pago**: lee el estado del débito y registra los pagos aprobados que falten, por el mismo camino que el webhook (no duplica nada). Los avisos de pagos que no se pudieron asignar a ninguna suscripción quedan en la tabla `mp_notificaciones` con `sin_cobro = 1` y el motivo en `error`.
+
+## Sistemas de los clientes ("Acceder a VEZZA")
+
+Cada sistema que le hiciste a un cliente puede mostrarle, en su menú, el módulo **Acceder a VEZZA**: el estado de su cuenta con VEZZA (plan, monto, "pago hasta", pendientes y últimos pagos). El cliente entra con el usuario y la clave de su propio sistema; el servidor del sistema le pide los datos a `https://vezzadev.com/api/sistema-cuenta` con un token propio, que nunca llega al navegador. Es solo informativo: no corta nada por falta de pago.
+
+### Primer deploy
+
+1. Aplicá la migración `004_sistemas` desde `https://vezzadev.com/admin/migraciones` → **Aplicar migraciones** (o importando `db/migrations/004_sistemas.sql` en phpMyAdmin). Es aditiva: solo crea la tabla `sistemas`.
+2. No hay variables nuevas en el `.env` de VEZZA.
+
+### Conectar un sistema
+
+1. En la ficha del cliente → **Sistemas** → **+ Conectar sistema**: nombre, repo de GitHub y URL.
+2. Copiá las dos líneas que aparecen (`VEZZA_URL` y `VEZZA_TOKEN`) y pegalas en el `.env` del servidor del sistema. El token se muestra una sola vez: si lo perdés, **Generar token nuevo** (el anterior deja de funcionar).
+3. Reiniciá el sistema y entrá a **Acceder a VEZZA** con un usuario dueño. En la ficha del cliente, el sistema pasa a mostrar su **Último contacto**; si dice "Nunca se conectó", el sistema todavía no consultó (revisá las dos variables).
