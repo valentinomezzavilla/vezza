@@ -90,6 +90,7 @@ const Cobros = {
     if (c.comprobante_url) {
       acciones.push(el('a', { class: 'btn btn-chico', href: c.comprobante_url, target: '_blank', rel: 'noopener noreferrer', text: 'Ver link' }));
     }
+    if (c.estado === 'pagado') acciones.push(...Cobros.accionesComprobante(c, recargar));
     const fecha = c.estado === 'pagado' ? `Pagado el ${Panel.fmtFecha(c.fecha_pago)}` : `Vence ${Panel.fmtFecha(c.fecha_vencimiento)}`;
     return el('div', { class: 'item' },
       el('div', { class: 'item-top' },
@@ -97,7 +98,50 @@ const Cobros = {
         Panel.badgeEstado('estadoCobro', c.estado_efectivo)),
       el('div', { class: 'item-sub', text: [c.cliente_nombre, c.proceso_titulo, c.concepto].filter(Boolean).join(' · ') }),
       el('div', { class: 'item-sub', text: [fecha, c.metodo_pago].filter(Boolean).join(' · ') }),
+      c.estado === 'pagado' ? el('div', { class: 'item-sub', text: Cobros.textoComprobante(c.comprobante_pago) }) : null,
       el('div', { class: 'item-acciones' }, acciones));
+  },
+
+  // ---- comprobante de pago (no válido como factura) ----
+
+  AVISO_COMPROBANTE: {
+    enviado: 'Comprobante enviado por mail.',
+    no_enviado: 'El comprobante quedó emitido pero no salió el mail. Probá Reenviar.',
+    sin_mail: 'El comprobante quedó emitido, pero el cliente no tiene mail cargado.',
+  },
+
+  textoComprobante(cp) {
+    if (!cp) return 'Sin comprobante de pago';
+    if (cp.enviado_en) return `Comprobante ${cp.numero} · enviado a ${cp.destino}`;
+    return `Comprobante ${cp.numero} · ${cp.error || 'todavía no se mandó'}`;
+  },
+
+  accionesComprobante(c, recargar) {
+    const { el } = Panel;
+    const cp = c.comprobante_pago;
+    const avisar = (aviso) => Panel.toast(Cobros.AVISO_COMPROBANTE[aviso] ?? 'Listo');
+    if (!cp) {
+      return [Panel.boton('Emitir comprobante', async () => {
+        try {
+          avisar((await Panel.post('/api/comprobantes-pago', { cobro_id: c.id })).aviso);
+          recargar();
+        } catch (err) {
+          Panel.manejarError(err);
+        }
+      }, 'chico')];
+    }
+    const id = Number(cp.numero.split('-')[1]);
+    return [
+      el('a', { class: 'btn btn-chico', href: `/admin/comprobante?n=${cp.numero}`, target: '_blank', rel: 'noopener', text: 'Ver comprobante' }),
+      Panel.boton(cp.enviado_en ? 'Reenviar comprobante' : 'Enviar comprobante', async () => {
+        try {
+          avisar((await Panel.post(`/api/comprobantes-pago/${id}/reenviar`)).aviso);
+          recargar();
+        } catch (err) {
+          Panel.manejarError(err);
+        }
+      }, 'chico'),
+    ];
   },
 
   totales(cobros) {

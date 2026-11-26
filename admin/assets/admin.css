@@ -315,3 +315,32 @@ dialog.modal form { display: flex; flex-direction: column; max-height: inherit; 
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
   .btn:active, a.item:active, button.item:active, a.stat:active, .boton-texto:active { transform: none; }
 }
+
+/* ---- Comprobante de pago (pantalla e impresión) ---- */
+.cp-pagina { background: var(--bg); padding: 16px; }
+.cp-acciones { max-width: 720px; margin: 0 auto 16px; display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+.cp { max-width: 720px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; }
+.cp-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+.cp-emisor { font-family: Sora, sans-serif; font-size: 1.5rem; font-weight: 700; }
+.cp-tipo { text-align: right; font-weight: 600; }
+.cp-numero { font-family: Sora, sans-serif; font-size: 1.125rem; }
+.cp-sub { color: var(--muted); font-size: .875rem; font-weight: 400; }
+.cp-datos { margin: 16px 0; display: grid; gap: 10px; }
+.cp-fila { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
+.cp-fila dt { color: var(--muted); }
+.cp-fila dd { margin: 0; font-weight: 600; }
+.cp-total { display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid var(--line); padding-top: 14px; font-size: 1.125rem; }
+.cp-total strong { font-family: Sora, sans-serif; font-size: 1.5rem; }
+.cp-leyenda { margin-top: 20px; text-align: center; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; font-size: .8125rem; color: var(--muted); }
+.cp-sello { margin: 16px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--danger-soft); color: var(--danger); font-weight: 700; }
+.cp-anulado .cp-datos, .cp-anulado .cp-total { opacity: .55; }
+@media (max-width: 480px) {
+  .cp { padding: 18px; }
+  .cp-tipo { text-align: left; }
+  .cp-fila { grid-template-columns: 1fr; gap: 2px; }
+}
+@media print {
+  .cp-pagina { background: #fff; padding: 0; }
+  .cp-acciones { display: none; }
+  .cp { border: none; box-shadow: none; max-width: none; }
+}

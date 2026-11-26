@@ -111,7 +111,7 @@ DirectoryIndex index.html
   RewriteRule ^admin/?$ admin/index.php [L,QSA]
   RewriteRule ^admin/clientes/([0-9]+)$ admin/cliente.php?id=$1 [L,QSA]
   RewriteRule ^admin/procesos/([0-9]+)$ admin/proceso.php?id=$1 [L,QSA]
-  RewriteRule ^admin/(clientes|procesos|cobros|planes|gastos|tareas|fixs|agenda|reportes|monitor|migraciones)$ admin/$1.php [L,QSA]
+  RewriteRule ^admin/(clientes|procesos|cobros|planes|gastos|tareas|fixs|agenda|reportes|monitor|migraciones|comprobante)$ admin/$1.php [L,QSA]
   RewriteRule ^api/suscripciones/([0-9]+)/pagar$ api/suscripciones.php?id=$1&accion=pagar [L,QSA]
   RewriteRule ^api/suscripciones-cliente/([0-9]+)/([a-z-]+)$ api/suscripciones-cliente.php?id=$1&accion=$2 [L,QSA]
   RewriteRule ^api/suscripciones-mensuales$ api/suscripciones-cliente.php?accion=mensuales [L,QSA]
@@ -119,6 +119,7 @@ DirectoryIndex index.html
   RewriteRule ^api/monitor/chequear$ api/monitor.php?accion=chequear [L,QSA]
   RewriteRule ^api/monitor/([0-9]+)/chequear$ api/monitor.php?id=$1&accion=chequear [L,QSA]
   RewriteRule ^api/sistemas/([0-9]+)/token$ api/sistemas.php?id=$1&accion=token [L,QSA]
+  RewriteRule ^api/comprobantes-pago/([0-9]+)/reenviar$ api/comprobantes-pago.php?id=$1&accion=reenviar [L,QSA]
   RewriteRule ^api/([a-z-]+)/([0-9]+)$ api/$1.php?id=$2 [L,QSA]
   RewriteRule ^api/([a-z-]+)$ api/$1.php [L,QSA]
 </IfModule>
@@ -129,5 +130,5 @@ DirectoryIndex index.html
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteRule ^clientes/?$ clientes/index.php [L,QSA]
-  RewriteRule ^clientes/(login|activar|recuperar|logout)$ clientes/$1.php [L,QSA]
+  RewriteRule ^clientes/(login|activar|recuperar|logout|comprobante)$ clientes/$1.php [L,QSA]
 </IfModule>

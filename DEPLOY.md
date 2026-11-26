@@ -324,3 +324,18 @@ Cada suscripción vence un día fijo de cada mes (del 1 al 28). Su "próximo ven
 2. Revisá en **Cobros → Suscripciones mensuales** que las fechas hayan quedado como esperabas. Para otro día, **Editar** en la suscripción.
 3. Las altas nuevas vencen, por defecto, el día de la fecha de inicio (del 29 al 31, el 28). Se puede elegir otro día en el formulario.
 4. Con débito automático, Mercado Pago cobra el día de vencimiento (`billing_day`, *a confirmar con credenciales de prueba*). Cambiar el día de una suscripción con débito lo cambia también en Mercado Pago; si Mercado Pago no lo acepta, no se cambia nada.
+
+## Comprobantes de pago
+
+Cada pago registrado de una suscripción (a mano, por débito o, más adelante, desde el portal) emite un **comprobante de pago no válido como factura** con número correlativo (`0001-00000042`) y se lo manda al cliente por mail: a la casilla de su acceso al portal o, si no tiene, a la de su ficha. Lo que dice el comprobante queda fijo al emitirlo. Si borrás un pago o lo volvés a pendiente, su comprobante queda **anulado**; si lo corregís (monto, fecha, concepto o medio), se anula y sale uno nuevo.
+
+1. Aplicá la migración `006_comprobantes_pago` desde `/admin/migraciones`.
+2. Agregá al `.env` del servidor los datos que van en el encabezado del comprobante:
+
+   ```dotenv
+   COMPROBANTE_EMISOR_NOMBRE=VEZZA
+   COMPROBANTE_EMISOR_CONTACTO=info@vezzadev.com · vezzadev.com
+   COMPROBANTE_EMISOR_CUIT=        # opcional
+   ```
+3. El mail sale por el workflow "VEZZA · Mails del portal", que ya tiene la plantilla `comprobante_pago`. No hay que importar nada.
+4. En la ficha del cliente: cada cobro pagado muestra su comprobante con **Ver comprobante** y **Reenviar comprobante**; los cobros pagados sin comprobante (sueltos o anteriores) tienen **Emitir comprobante**. La pestaña **Comprobantes** lista todos, también los anulados.

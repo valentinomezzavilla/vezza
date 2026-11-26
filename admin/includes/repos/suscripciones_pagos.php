@@ -44,9 +44,19 @@ function cobro_concepto_pago(string $plan, string $fecha, int $meses): string
  * y el segundo ve lo que registró el primero. La búsqueda del mp_payment_id es una lectura común a propósito (sin FOR UPDATE ni
  * LOCK IN SHARE MODE): con candado tomaría un candado de intervalo sobre la clave única y dos pagos distintos se bloquearían entre sí.
  *
- * @return array{resultado: 'registrado'|'repetido', cobro_id: int, fecha_proximo_cobro: ?string}
+ * Cada pago registrado emite su comprobante (en la misma transacción) y, ya registrado, se lo manda al cliente por mail. Un
+ * pago repetido no emite ni manda nada. El mail que no sale no deshace nada: queda para reenviar desde el admin.
+ *
+ * @return array{resultado: 'registrado'|'repetido', cobro_id: int, fecha_proximo_cobro: ?string, comprobante_id: ?int, comprobante_aviso: ?string}
  */
 function suscripcion_registrar_pago(int $suscripcionId, array $pago): array
+{
+    $r = suscripcion_registrar_pago_tx($suscripcionId, $pago);
+    $r['comprobante_aviso'] = $r['comprobante_id'] !== null ? comprobante_pago_enviar($r['comprobante_id']) : null;
+    return $r;
+}
+
+function suscripcion_registrar_pago_tx(int $suscripcionId, array $pago): array
 {
     return tx(function () use ($suscripcionId, $pago): array {
         $s = q_one('SELECT * FROM suscripciones_cliente WHERE id = ? FOR UPDATE', [$suscripcionId]);
@@ -57,7 +67,7 @@ function suscripcion_registrar_pago(int $suscripcionId, array $pago): array
         if ($mpPaymentId !== null) {
             $ya = q_one('SELECT id FROM cobros WHERE mp_payment_id = ?', [$mpPaymentId]);
             if ($ya !== null) {
-                return ['resultado' => 'repetido', 'cobro_id' => (int)$ya['id'], 'fecha_proximo_cobro' => $s['fecha_proximo_cobro']];
+                return ['resultado' => 'repetido', 'cobro_id' => (int)$ya['id'], 'fecha_proximo_cobro' => $s['fecha_proximo_cobro'], 'comprobante_id' => null];
             }
         }
 
@@ -85,7 +95,9 @@ function suscripcion_registrar_pago(int $suscripcionId, array $pago): array
             'mp_payment_id' => $mpPaymentId,
         ]);
         crud_update('suscripciones_cliente', $suscripcionId, ['fecha_proximo_cobro' => $nueva]);
-        return ['resultado' => 'registrado', 'cobro_id' => $cobroId, 'fecha_proximo_cobro' => $nueva];
+        $hasta = (new DateTimeImmutable($nueva))->modify('-1 day')->format('Y-m-d');
+        $comprobanteId = comprobante_pago_emitir($cobroId, ['desde' => $vencimiento, 'hasta' => $hasta]);
+        return ['resultado' => 'registrado', 'cobro_id' => $cobroId, 'fecha_proximo_cobro' => $nueva, 'comprobante_id' => $comprobanteId];
     });
 }
 

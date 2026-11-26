@@ -7,6 +7,15 @@
 | `precio_cambiado` | Al ajustar el precio de una suscripción | `nombre`, `plan`, `monto_anterior`, `monto_nuevo` (ya con formato `$85.000`), `desde` (texto largo, `''` si no hay fecha) |
 | `suscripcion_cancelada` | Al dar de baja una suscripción (`motivo = baja`) o cuando Mercado Pago cancela el débito por afuera y la suscripción sigue activa (`motivo = debito`) | `nombre`, `plan`, `motivo`, `acceso_hasta` (texto largo), `vencida` (`true` si lo pagado ya terminó y `acceso_hasta` viene vacío) |
 
+## Comprobantes de pago y transferencias no confirmadas
+
+Estas dos plantillas viven en el workflow **"VEZZA · Mails del portal"** (nodo *Validar y armar mail*), que ya las tiene cargadas desde el 26/11/2026:
+
+| `plantilla` | Cuándo la manda la app | `datos` |
+|---|---|---|
+| `comprobante_pago` | Cada vez que se registra un pago (o el admin emite o reenvía un comprobante). El mail trae el comprobante en el cuerpo y un botón a su versión imprimible | `nombre`, `numero` (`0001-00000042`), `fecha` (`5/12/2026`), `concepto`, `periodo` (`5/12/2026 al 4/1/2027`, `''` en un cobro suelto), `medio`, `monto` (`$45.000` o `USD 100`), `emisor`, `link` (tiene que ser `https://vezzadev.com/clientes/comprobante?n=...`), `leyenda` |
+| `pago_rechazado` | Cuando el admin rechaza una transferencia que el cliente informó desde el portal | `nombre`, `monto`, `fecha`, `motivo` |
+
 n8n **no decide nada**: la app decide cuándo avisar y arma los datos; el workflow solo arma el texto y lo entrega. El contrato es el de `mail_enviar`: un `POST` con `{plantilla, destino, datos}` y el secreto en el header `X-Webhook-Secret`. Si n8n está caído o no contesta 2xx, la app no se rompe: el cambio igual queda hecho y en pantalla se avisa que el mail no salió.
 
 ## Cómo cargarlo

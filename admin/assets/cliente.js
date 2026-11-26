@@ -105,11 +105,28 @@
     if (r) renderBitacora(panel).catch(Panel.manejarError);
   }
 
+  async function renderComprobantes(panel) {
+    const lista = await Panel.get('/api/comprobantes-pago', { cliente_id: id });
+    const items = lista.map((c) => el('article', { class: 'item' },
+      el('div', { class: 'item-top' },
+        el('a', { class: 'item-titulo', href: `/admin/comprobante?n=${c.numero}`, target: '_blank', rel: 'noopener', text: `N° ${c.numero}` }),
+        el('span', { class: 'item-titulo', text: Panel.fmtMonto(c.datos.monto, c.datos.moneda) })),
+      el('div', { class: 'item-sub', text: `${Panel.fmtFecha(c.datos.fecha)} · ${c.datos.concepto}` }),
+      el('div', { class: 'item-acciones' },
+        c.anulado
+          ? Panel.badge(`Anulado · ${c.motivo_anulacion ?? ''}`, 'danger')
+          : Panel.badge(c.enviado_en ? `Enviado a ${c.destino}` : (c.error || 'Sin enviar'), c.enviado_en ? 'ok' : 'warn'))));
+    Panel.llenar(panel,
+      el('p', { class: 'item-sub', text: 'Cada pago registrado emite un comprobante (no válido como factura) y se le manda al cliente por mail.' }),
+      items.length ? el('div', { class: 'lista seccion' }, items) : Panel.vacio('Todavía no hay comprobantes.'));
+  }
+
   const totalCobros = (cobros) => (cobros.length ? el('p', { class: 'item-sub', text: `Total: ${Cobros.totales(cobros)}` }) : null);
 
   const TABS = [
     { id: 'procesos', label: 'Procesos', render: tabEntidad(Procesos, '/api/procesos', '+ Nuevo proceso', 'Este cliente todavía no tiene procesos.') },
     { id: 'cobros', label: 'Cobros', render: tabEntidad(Cobros, '/api/cobros', '+ Nuevo cobro', 'Este cliente todavía no tiene cobros.', totalCobros) },
+    { id: 'comprobantes', label: 'Comprobantes', render: renderComprobantes },
     { id: 'fixs', label: 'Fixs', render: tabEntidad(Fixs, '/api/fixs', '+ Nuevo fix', 'Sin fixs reportados.') },
     { id: 'bitacora', label: 'Bitácora', render: renderBitacora },
     { id: 'eventos', label: 'Eventos', render: tabEntidad(Eventos, '/api/eventos', '+ Nuevo evento', 'Sin eventos con este cliente.') },

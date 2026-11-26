@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PANEL_ASSET_V = '9';
+const PANEL_ASSET_V = '10';
 
 const NAV_PRINCIPAL = [
     'inicio' => ['/admin', 'Inicio'],
