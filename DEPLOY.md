@@ -343,3 +343,14 @@ Cada pago registrado de una suscripción (a mano, por débito o, más adelante, 
 ### Copia de los comprobantes en los sistemas
 
 Cada sistema conectado guarda una copia de los comprobantes de su cliente en su propia base: los pide a `/api/sistema-comprobantes` al arrancar, cada 6 horas y cada vez que alguien abre **Acceder a VEZZA**, y ahí aparecen en **Comprobantes de pago** (se imprimen o se guardan como PDF). Aplicá la migración `007_sistemas_comprobantes`. En la ficha del cliente, cada sistema muestra **Comprobantes al día** o cuántos le faltan copiar.
+
+## Pagar desde el portal
+
+### Con Mercado Pago (tarjeta, dinero en cuenta o efectivo)
+
+En el portal, cada suscripción activa en pesos tiene **Pagar $X con Mercado Pago**: crea un pago único (Checkout Pro) por el monto de la suscripción y lleva al cliente a Mercado Pago. El pago se registra solo cuando Mercado Pago avisa que se aprobó (un pago en efectivo, cuando se acredita) y sale su comprobante.
+
+1. Aplicá la migración `008_pagos_portal`.
+2. En la aplicación de Mercado Pago de VEZZA, en **Webhooks**, sumá el evento **Pagos** (`payment`) a la misma URL `https://vezzadev.com/api/mp-webhook`.
+3. *A confirmar con credenciales de prueba* (no se pudo leer la documentación al programarlo; todo vive en `mp_crear_preferencia` y `mp_procesar_pago_portal`): los campos de la preferencia (`items`, `external_reference`, `notification_url`, `back_urls`, `auto_return`, `expiration_date_to`), que un pago en efectivo mande un segundo aviso al aprobarse y `payment_type_id` del pago.
+4. Probá con un usuario de prueba: pagar con tarjeta, pagar en efectivo, y que en los dos casos el vencimiento avance un mes y llegue el comprobante.

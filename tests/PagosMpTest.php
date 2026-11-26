@@ -471,11 +471,14 @@ final class PagosMpTest extends DbTestCase
     {
         $s = $this->debito();
         $this->ofrecerCobro('900', $this->pagoMp(9001, $s));
-        foreach (['payment', 'plan', 'subscription_preapproval_plan', 'topic-raro'] as $tema) {
+        foreach (['plan', 'subscription_preapproval_plan', 'topic-raro'] as $tema) {
             $this->assertSame(['http' => 200, 'resultado' => 'ignorado'], $this->notificar('900', $tema), $tema);
         }
-        $this->assertSame([], $this->cobrosDe($s));
         $this->assertSame([], $this->consultas);
+        // `payment` se consulta (puede ser un pago del portal), pero uno del débito llega por subscription_authorized_payment:
+        // por acá se ignora y no registra nada.
+        $this->assertSame(['http' => 200, 'resultado' => 'ignorado'], $this->notificar('9001', 'payment'));
+        $this->assertSame([], $this->cobrosDe($s));
     }
 
     // ---- Sincronizar -------------------------------------------------------------------------------------------

@@ -140,6 +140,18 @@ function mp_crear_preapproval(array $suscripcion, string $emailCliente, ?string 
     return mp_id_y_link($r, 'la suscripción');
 }
 
+/**
+ * Crea una preferencia de Checkout Pro (pago único): POST /checkout/preferences. *A confirmar* contra la documentación vigente
+ * (no se pudo leer al escribirlo): items[].title/quantity/unit_price/currency_id, external_reference, notification_url,
+ * back_urls, auto_return, expires/expiration_date_to y que la respuesta traiga init_point.
+ *
+ * @return array{id: string, init_point: string}
+ */
+function mp_crear_preferencia(array $cuerpo): array
+{
+    return mp_id_y_link(mp_request('POST', '/checkout/preferences', $cuerpo), 'el pago');
+}
+
 /** Una fecha 'YYYY-MM-DD' como la pide start_date: al mediodía, hora de Argentina. */
 function mp_inicio_iso(string $fecha): string
 {

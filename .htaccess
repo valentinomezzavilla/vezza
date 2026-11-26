@@ -130,5 +130,5 @@ DirectoryIndex index.html
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteRule ^clientes/?$ clientes/index.php [L,QSA]
-  RewriteRule ^clientes/(login|activar|recuperar|logout|comprobante)$ clientes/$1.php [L,QSA]
+  RewriteRule ^clientes/(login|activar|recuperar|logout|comprobante|pagar|transferencia|debito)$ clientes/$1.php [L,QSA]
 </IfModule>

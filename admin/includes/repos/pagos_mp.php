@@ -36,6 +36,8 @@ function mp_pago_normalizar(array $p): array
         'moneda' => strtoupper((string)($p['currency_id'] ?? '')),
         'referencia_externa' => (string)($p['external_reference'] ?? ''),
         'preapproval_id' => (string)$preapproval,
+        // credit_card, debit_card, account_money, ticket (efectivo)... *a confirmar*: payment_type_id de GET /v1/payments/{id}.
+        'tipo' => (string)($p['payment_type_id'] ?? ''),
     ];
 }
 
@@ -129,6 +131,7 @@ function mp_webhook_procesar(array $headers, array $query, string $cuerpoCrudo):
         $r = match ($tipo) {
             'subscription_authorized_payment' => mp_procesar_cobro_recurrente($dataId),
             'subscription_preapproval', 'preapproval' => mp_procesar_preapproval($dataId),
+            'payment' => mp_procesar_pago_portal($dataId),
             default => ['resultado' => 'ignorado'],
         };
     } catch (Throwable $e) {

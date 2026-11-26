@@ -26,9 +26,10 @@ final class MercadoPagoTest extends TestCase
         };
     }
 
-    public function test_ya_no_hay_preferencias_de_pago(): void
+    public function test_las_preferencias_son_solo_para_pagar_desde_el_portal(): void
     {
-        $this->assertFalse(function_exists('mp_crear_preferencia'));
+        // Volvieron con el pago desde el portal (spec 2026-11-26): las inicia el cliente; no hay links mensuales que invalidar.
+        $this->assertTrue(function_exists('mp_crear_preferencia'));
         $this->assertFalse(function_exists('mp_invalidar_preferencia'));
     }
 

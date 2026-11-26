@@ -13,6 +13,8 @@ $avisos = [
     'rechazado' => ['danger', 'Mercado Pago no aprobó el pago. Podés probar de nuevo con otro medio.'],
     'transferencia' => ['ok', 'Recibí el aviso de tu transferencia. Cuando la confirme te llega el comprobante por mail.'],
     'debito' => ['ok', 'Listo: cuando Mercado Pago confirme el débito automático lo vas a ver acá.'],
+    'no_mp' => ['danger', 'No pudimos iniciar el pago con Mercado Pago. Probá de nuevo en un rato o pagá por transferencia.'],
+    'muchos' => ['warn', 'Iniciaste muchos pagos seguidos. Esperá un rato y probá de nuevo.'],
 ];
 $aviso = $avisos[is_string($_GET['aviso'] ?? null) ? $_GET['aviso'] : ''] ?? null;
 

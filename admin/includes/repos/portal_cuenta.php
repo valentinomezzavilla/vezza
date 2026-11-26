@@ -141,7 +141,21 @@ function portal_acciones_pago(array $s): string
     if ($s['estado'] !== 'activa') {
         return '';
     }
-    return '';
+    if ($s['debito_activo']) {
+        return '<span class="item-sub">Se cobra solo, con débito automático.</span>';
+    }
+    $html = '';
+    if ($s['debito_pendiente_link'] !== null) {
+        $html .= '<a class="btn btn-primario" href="' . e($s['debito_pendiente_link']) . '">Terminar de autorizar el débito</a>';
+    }
+    $csrf = '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">'
+        . '<input type="hidden" name="suscripcion_id" value="' . (int)$s['id'] . '">';
+    if (portal_pago_mp_motivo($s) === null) {
+        $html .= '<form method="post" action="/clientes/pagar">' . $csrf
+            . '<button class="btn btn-primario" type="submit">Pagar ' . e(comprobante_monto_texto((string)$s['monto'], (string)$s['moneda']))
+            . ' con Mercado Pago</button></form>';
+    }
+    return $html;
 }
 
 /** Lo pendiente (cobros sueltos) y los pagos con su comprobante, como listas del portal. */
