@@ -133,7 +133,7 @@ final class SistemasTest extends DbTestCase
         $this->assertSame(['nombre' => 'Sistema de gestión'], $c['sistema']);
         $this->assertSame([[
             'plan' => 'Mantenimiento', 'descripcion' => 'Soporte y hosting', 'monto' => '25000.00', 'moneda' => 'ARS', 'frecuencia' => 'mensual',
-            'modalidad' => 'transferencia', 'debito_activo' => false, 'estado' => 'activa', 'fecha_inicio' => '2026-03-10',
+            'modalidad' => 'transferencia', 'debito_activo' => false, 'estado' => 'activa', 'fecha_inicio' => '2026-03-10', 'dia_vencimiento' => 15,
             'pago_hasta' => '2026-03-15', 'cobro_estado' => 'por_vencer', 'cobro_dias' => 5,
         ]], $c['suscripciones']);
         $this->assertSame([['fecha' => '2026-02-14', 'concepto' => 'Febrero', 'monto' => '25000.00', 'moneda' => 'ARS', 'metodo' => 'Transferencia']], $c['pagos']);

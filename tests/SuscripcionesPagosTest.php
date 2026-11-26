@@ -25,7 +25,7 @@ final class SuscripcionesPagosTest extends DbTestCase
     {
         return $extra + [
             'meses' => 1, 'monto' => '25000.00', 'moneda' => 'ARS', 'metodo_pago' => 'Mercado Pago · débito',
-            'mp_payment_id' => $paymentId, 'avance' => 'fecha',
+            'mp_payment_id' => $paymentId,
         ];
     }
 
@@ -97,24 +97,38 @@ final class SuscripcionesPagosTest extends DbTestCase
         $this->assertSame('Mantenimiento · marzo 2026 — Descuento por pago adelantado', $r['cobro']['concepto']);
     }
 
-    public function test_el_pago_manual_avanza_desde_la_fecha_si_no_vencio_y_desde_hoy_si_vencio(): void
+    public function test_el_pago_manual_corre_el_vencimiento_un_mes_sin_mover_el_dia(): void
     {
+        // Pagado antes de vencer: el próximo vence el mismo día del mes siguiente.
         $alDia = $this->susc('2026-03-25');
         $this->assertSame('2026-04-25', suscripcion_pago_manual($alDia['id'], [])['suscripcion']['fecha_proximo_cobro']);
 
+        // Pagado tarde: cubre lo que venció el 1 de marzo y el próximo vence el 1 de abril, no un mes desde hoy.
         $vencida = $this->susc('2026-03-01');
-        $this->assertSame('2026-04-10', suscripcion_pago_manual($vencida['id'], [])['suscripcion']['fecha_proximo_cobro']);
+        $r = suscripcion_pago_manual($vencida['id'], []);
+        $this->assertSame('2026-04-01', $r['suscripcion']['fecha_proximo_cobro']);
+        $this->assertSame('2026-03-01', $r['cobro']['fecha_vencimiento']);
+        $this->assertSame('Mantenimiento · marzo 2026', $r['cobro']['concepto']);
     }
 
-    public function test_sin_fecha_de_proximo_cobro_se_cuenta_desde_hoy(): void
+    public function test_quien_debe_varios_meses_y_paga_uno_sigue_debiendo_los_otros(): void
     {
-        $s = $this->susc();
+        $s = $this->susc('2026-01-05');
+        $this->assertSame('2026-02-05', suscripcion_pago_manual($s['id'], [])['suscripcion']['fecha_proximo_cobro']);
+        $this->assertSame('vencido', suscripciones_cliente_get($s['id'])['cobro_estado']);
+        $this->assertSame('2026-04-05', suscripcion_pago_manual($s['id'], ['meses' => 2])['suscripcion']['fecha_proximo_cobro']);
+        $this->assertSame('al_dia', suscripciones_cliente_get($s['id'])['cobro_estado']);
+    }
+
+    public function test_sin_fecha_cubre_el_primer_vencimiento_desde_hoy(): void
+    {
+        $s = $this->susc('2026-03-15'); // vence los 15
         crud_update('suscripciones_cliente', $s['id'], ['fecha_proximo_cobro' => null]);
 
         $r = suscripcion_pago_manual($s['id'], []);
 
-        $this->assertSame('2026-03-10', $r['cobro']['fecha_vencimiento']);
-        $this->assertSame('2026-04-10', $r['suscripcion']['fecha_proximo_cobro']);
+        $this->assertSame('2026-03-15', $r['cobro']['fecha_vencimiento']);
+        $this->assertSame('2026-04-15', $r['suscripcion']['fecha_proximo_cobro']);
     }
 
     public function test_los_meses_y_el_monto_se_validan(): void
@@ -209,25 +223,26 @@ final class SuscripcionesPagosTest extends DbTestCase
         $this->assertSame('pagado', cobros_get($r['cobro_id'])['estado']);
     }
 
-    public function test_fin_de_mes_con_el_debito(): void
+    public function test_un_alta_de_fin_de_mes_vence_los_28(): void
     {
         clock_set('2026-01-31');
-        $s = $this->susc('2026-01-31');
-        $this->assertSame('2026-02-28', suscripcion_registrar_pago($s['id'], $this->pagoMp('pago-1'))['fecha_proximo_cobro']);
-        // La fecha ya quedó en 28 feb: el día original se pierde de acá en adelante (regla de sumar_periodo del repo).
-        $this->assertSame('2026-03-28', suscripcion_registrar_pago($s['id'], $this->pagoMp('pago-2'))['fecha_proximo_cobro']);
+        $s = suscripciones_cliente_create(['cliente_id' => $this->cliente, 'plan_id' => $this->plan['id'], 'fecha_inicio' => '2026-01-31']);
+        $this->assertSame(28, (int)$s['dia_vencimiento']);
+        $this->assertSame('2026-02-28', $s['fecha_proximo_cobro']);
+        $this->assertSame('2026-03-28', suscripcion_registrar_pago($s['id'], $this->pagoMp('pago-1'))['fecha_proximo_cobro']);
+        $this->assertSame('2026-04-28', suscripcion_registrar_pago($s['id'], $this->pagoMp('pago-2'))['fecha_proximo_cobro']);
     }
 
-    public function test_un_debito_atrasado_por_meses_se_cuenta_desde_hoy(): void
+    public function test_un_debito_atrasado_por_meses_sigue_el_calendario(): void
     {
-        // Hoy es 10 mar y el "pago hasta" quedó en enero: sumarle un mes lo dejaría en febrero, todavía vencido,
-        // aunque el cliente acaba de pagar. Se cuenta desde hoy.
+        // Hoy es 10 mar y el vencimiento quedó en enero: el cobro cubre enero y el próximo vence en febrero. Sigue vencido
+        // porque debe febrero: con vencimiento fijo nunca se cuenta desde hoy.
         $s = $this->susc('2026-01-15');
 
         $r = suscripcion_registrar_pago($s['id'], $this->pagoMp('pago-1'));
 
-        $this->assertSame('2026-04-10', $r['fecha_proximo_cobro']);
-        $this->assertSame('al_dia', suscripciones_cliente_get($s['id'])['cobro_estado']);
+        $this->assertSame('2026-02-15', $r['fecha_proximo_cobro']);
+        $this->assertSame('vencido', suscripciones_cliente_get($s['id'])['cobro_estado']);
         $this->assertSame('2026-01-15', cobros_get($r['cobro_id'])['fecha_vencimiento'], 'El cobro conserva la fecha que venció');
     }
 

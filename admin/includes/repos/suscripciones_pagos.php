@@ -34,10 +34,11 @@ function cobro_concepto_pago(string $plan, string $fecha, int $meses): string
  * Registra un pago de una suscripción: crea el cobro `pagado` y adelanta fecha_proximo_cobro. Es el único camino por el que
  * un pago entra, el manual y el de Mercado Pago, así que la idempotencia vive acá.
  *
- * $pago: meses (int), monto (string decimal), moneda, metodo_pago, mp_payment_id (?string), nota (?string, opcional),
- *   avance: 'max_hoy' avanza desde el mayor entre fecha_proximo_cobro y hoy (pago manual); 'fecha' avanza desde
- *   fecha_proximo_cobro (débito: Mercado Pago cobra por calendario, un aviso tardío no tiene que correr la fecha), salvo que el
- *   cliente esté atrasado por meses: ahí se cuenta desde hoy (ver abajo).
+ * $pago: meses (int), monto (string decimal), moneda, metodo_pago, mp_payment_id (?string), nota (?string, opcional).
+ *
+ * Vencimiento fijo: el pago cubre los meses que vencen desde fecha_proximo_cobro y la corre esos meses, siempre en el mismo día.
+ * Nunca se cuenta desde hoy: pagar tarde no corre el día, y un cliente que debe tres meses y paga uno sigue debiendo dos. Sin
+ * fecha (no debería pasar), cubre el primer vencimiento desde hoy.
  *
  * La fila de la suscripción se toma con FOR UPDATE como PRIMERA sentencia de la transacción: dos avisos del mismo pago se hacen cola
  * y el segundo ve lo que registró el primero. La búsqueda del mp_payment_id es una lectura común a propósito (sin FOR UPDATE ni
@@ -62,15 +63,8 @@ function suscripcion_registrar_pago(int $suscripcionId, array $pago): array
 
         $hoy = hoy();
         $meses = (int)$pago['meses'];
-        $actual = $s['fecha_proximo_cobro'];
-        $vencimiento = $actual ?? $hoy;
-        $desde = $pago['avance'] === 'fecha' ? $vencimiento : max($vencimiento, $hoy);
-        // Un cliente atrasado por meses que recién ahora paga (por ejemplo, autorizó el débito tarde): si ni sumándole los meses
-        // del pago el "pago hasta" llega a hoy, se cuenta desde hoy. Si no, seguiría "vencido" meses después de haber pagado.
-        if ($pago['avance'] === 'fecha' && sumar_meses($desde, $meses) < $hoy) {
-            $desde = $hoy;
-        }
-        $nueva = sumar_meses($desde, $meses);
+        $vencimiento = $s['fecha_proximo_cobro'] ?? primer_vencimiento_desde($hoy, (int)$s['dia_vencimiento']);
+        $nueva = sumar_meses($vencimiento, $meses);
 
         $plan = (string)q_val('SELECT nombre FROM planes WHERE id = ?', [(int)$s['plan_id']]);
         $concepto = cobro_concepto_pago($plan, $vencimiento, $meses);
@@ -125,7 +119,6 @@ function suscripcion_pago_manual(int $suscripcionId, array $input): array
         'metodo_pago' => $datos['metodo_pago'] ?? 'Transferencia',
         'mp_payment_id' => null,
         'nota' => $datos['nota'] ?? null,
-        'avance' => 'max_hoy',
     ]);
     return ['cobro' => cobros_get($r['cobro_id']), 'suscripcion' => suscripciones_cliente_get($suscripcionId)];
 }

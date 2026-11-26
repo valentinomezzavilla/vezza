@@ -37,11 +37,19 @@ const Suscripciones = (() => {
     return lista;
   }
 
+  // fecha_proximo_cobro es el próximo vencimiento: siempre cae en el día de vencimiento de la suscripción.
   function pagoHasta(s) {
-    if (!s.fecha_proximo_cobro) return 'Sin fecha de próximo cobro';
+    if (!s.fecha_proximo_cobro) return 'Sin fecha de vencimiento';
     const dias = diasTexto(s.cobro_dias);
-    return `Pago hasta ${Panel.fmtFecha(s.fecha_proximo_cobro, true)}${dias && !cancelada(s) ? ` · ${dias}` : ''}`;
+    return `Vence el ${Panel.fmtFecha(s.fecha_proximo_cobro, true)}${dias && !cancelada(s) ? ` · ${dias}` : ''}`;
   }
+
+  const diaVencimiento = (s) => `Vence el ${s.dia_vencimiento} de cada mes`;
+
+  const CAMPO_DIA = {
+    name: 'dia_vencimiento', label: 'Día de vencimiento', type: 'number', min: 1, max: 28,
+    ayuda: 'Del 1 al 28. Cada pago corre el vencimiento un mes, siempre este día.',
+  };
 
   function ultimoPago(s) {
     const p = s.ultimo_pago;
@@ -132,7 +140,8 @@ const Suscripciones = (() => {
       campos: [
         { name: 'plan_id', label: 'Plan', type: 'select', required: true, options: planes.filter((p) => p.moneda === s.moneda).map((p) => [String(p.id), p.nombre]), ayuda: 'Cambiar de plan no cambia el monto: para eso usá Ajustar precio.' },
         { name: 'fecha_inicio', label: 'Fecha de inicio', type: 'date', required: true },
-        { name: 'fecha_proximo_cobro', label: 'Pago hasta / próximo cobro', type: 'date', required: true },
+        { ...CAMPO_DIA, required: true, ayuda: 'Del 1 al 28. Si lo cambiás, el próximo vencimiento pasa a ese día del mismo mes.' },
+        { name: 'fecha_proximo_cobro', label: 'Próximo vencimiento', type: 'date', required: true, ayuda: 'Tiene que caer el día de vencimiento.' },
       ],
       valores: s,
       enviar: (d) => Panel.put(`/api/suscripciones-cliente/${s.id}`, d),
@@ -149,7 +158,8 @@ const Suscripciones = (() => {
         { name: 'plan_id', label: 'Plan', type: 'select', required: true, vacio: 'Elegí un plan', options: planes.filter((p) => Number(p.activo)).map((p) => [String(p.id), `${p.nombre} · ${Panel.fmtMonto(p.monto, p.moneda)}`]) },
         { name: 'monto', label: 'Monto (opcional)', type: 'money', ayuda: 'Si lo dejás vacío se usa el del plan.' },
         { name: 'fecha_inicio', label: 'Fecha de inicio', type: 'date', default: Panel.hoy() },
-        { name: 'fecha_proximo_cobro', label: 'Próximo cobro (pago hasta)', type: 'date', required: true, default: Panel.hoy(), ayuda: 'Cada pago que registres, o que cobre Mercado Pago, la adelanta un mes.' },
+        { ...CAMPO_DIA, ayuda: 'Del 1 al 28. Si lo dejás vacío, el día de la fecha de inicio (del 29 al 31 queda el 28).' },
+        { name: 'fecha_proximo_cobro', label: 'Primer vencimiento (opcional)', type: 'date', ayuda: 'Si lo dejás vacío, el primer día de vencimiento desde la fecha de inicio. Cada pago lo corre un mes.' },
       ],
       valores,
       enviar: (d) => Panel.post('/api/suscripciones-cliente', sinVacios(d)),
@@ -167,7 +177,7 @@ const Suscripciones = (() => {
       switch (accion) {
         case 'pagar': {
           const r = await pedirPago(s);
-          if (r) hecho(`Pago registrado. Pago hasta ${Panel.fmtFecha(r.suscripcion.fecha_proximo_cobro, true)}.`);
+          if (r) hecho(`Pago registrado. Próximo vencimiento: ${Panel.fmtFecha(r.suscripcion.fecha_proximo_cobro, true)}.`);
           break;
         }
         case 'whatsapp':
@@ -247,7 +257,7 @@ const Suscripciones = (() => {
       el('div', { class: 'item-top' },
         el('a', { class: 'item-titulo', href: `/admin/clientes/${s.cliente_id}`, text: s.cliente_nombre }),
         el('span', { class: 'item-titulo', text: Panel.fmtMonto(s.monto, s.moneda) })),
-      el('div', { class: 'item-sub', text: s.plan_nombre }),
+      el('div', { class: 'item-sub', text: `${s.plan_nombre} · ${diaVencimiento(s)}` }),
       el('div', { class: 'item-acciones' }, badges(s)),
       el('div', { class: 'item-sub', text: pagoHasta(s) }),
       el('div', { class: 'item-sub', text: ultimoPago(s) }),
@@ -269,7 +279,8 @@ const Suscripciones = (() => {
         el('span', { class: 'item-titulo', text: Panel.fmtMonto(s.monto, s.moneda) })),
       el('div', { class: 'item-acciones' }, badges(s)),
       el('div', { class: 'datos' },
-        dato('Pago hasta', pagoHasta(s).replace(/^Pago hasta /, '')),
+        dato('Próximo vencimiento', pagoHasta(s).replace(/^Vence el /, '')),
+        dato('Día de vencimiento', `El ${s.dia_vencimiento} de cada mes`),
         dato('Débito automático', DEBITO[s.mp_preapproval_estado] ?? 'No tiene'),
         dato('Último pago', ultimoPago(s).replace(/^Último pago: /, ''))),
       s.debito_pendiente && s.mp_init_point

@@ -76,14 +76,90 @@ final class SuscripcionesClienteTest extends DbTestCase
         $this->assertArrayHasKey('modalidad', $this->errores422(fn() => suscripcion_validar_modalidad($s, 'debito')));
     }
 
-    public function test_fecha_proximo_cobro_es_obligatoria_para_suscripciones_activas(): void
+    public function test_fecha_proximo_cobro_no_se_puede_borrar(): void
     {
-        $this->assertArrayHasKey('fecha_proximo_cobro', $this->errores422(
-            fn() => suscripciones_cliente_create(['cliente_id' => $this->cliente, 'plan_id' => $this->plan['id']])
-        ));
         $s = $this->susc();
         $this->assertArrayHasKey('fecha_proximo_cobro', $this->errores422(fn() => suscripciones_cliente_update($s['id'], ['fecha_proximo_cobro' => null])));
         $this->assertSame('2026-05-01', suscripciones_cliente_update($s['id'], ['fecha_proximo_cobro' => '2026-05-01'])['fecha_proximo_cobro']);
+    }
+
+    // ---- vencimiento fijo ----
+
+    private function alta(array $extra = []): array
+    {
+        return suscripciones_cliente_create($extra + ['cliente_id' => $this->cliente, 'plan_id' => $this->plan['id']]);
+    }
+
+    public function test_sin_dia_vence_el_dia_del_alta_y_el_primer_vencimiento_es_el_alta(): void
+    {
+        $s = $this->alta(['fecha_inicio' => '2026-11-28']);
+        $this->assertSame(28, (int)$s['dia_vencimiento']);
+        $this->assertSame('2026-11-28', $s['fecha_proximo_cobro']);
+    }
+
+    public function test_un_alta_del_29_al_31_vence_los_28_desde_el_mes_siguiente(): void
+    {
+        $s = $this->alta(['fecha_inicio' => '2026-10-31']);
+        $this->assertSame(28, (int)$s['dia_vencimiento']);
+        $this->assertSame('2026-11-28', $s['fecha_proximo_cobro']);
+    }
+
+    public function test_con_dia_elegido_el_primer_vencimiento_es_el_primero_desde_el_alta(): void
+    {
+        $this->assertSame('2026-12-05', $this->alta(['fecha_inicio' => '2026-11-20', 'dia_vencimiento' => 5])['fecha_proximo_cobro']);
+        $this->assertSame('2026-11-25', $this->alta(['fecha_inicio' => '2026-11-20', 'dia_vencimiento' => 25])['fecha_proximo_cobro']);
+    }
+
+    public function test_sin_dia_toma_el_del_primer_vencimiento_elegido(): void
+    {
+        $s = $this->alta(['fecha_inicio' => '2026-11-20', 'fecha_proximo_cobro' => '2026-12-10']);
+        $this->assertSame(10, (int)$s['dia_vencimiento']);
+    }
+
+    public function test_el_primer_vencimiento_tiene_que_caer_en_el_dia(): void
+    {
+        $e = $this->errores422(fn() => $this->alta(['dia_vencimiento' => 5, 'fecha_proximo_cobro' => '2026-12-10']));
+        $this->assertSame('Tiene que caer el día 5, el día de vencimiento', $e['fecha_proximo_cobro']);
+        $e = $this->errores422(fn() => $this->alta(['fecha_proximo_cobro' => '2026-12-30']));
+        $this->assertSame('El vencimiento tiene que ser un día del 1 al 28', $e['fecha_proximo_cobro']);
+        foreach ([0, 29] as $malo) {
+            $this->assertArrayHasKey('dia_vencimiento', $this->errores422(fn() => $this->alta(['dia_vencimiento' => $malo])));
+        }
+    }
+
+    public function test_cambiar_el_dia_mueve_el_vencimiento_al_mismo_mes(): void
+    {
+        $s = $this->alta(['fecha_inicio' => '2026-11-28']);
+        $this->assertSame('2026-11-05', suscripciones_cliente_update($s['id'], ['dia_vencimiento' => 5])['fecha_proximo_cobro']);
+        // El formulario de edición manda también la fecha que ya tenía: igual se mueve.
+        $this->assertSame('2026-11-15', suscripciones_cliente_update($s['id'], ['dia_vencimiento' => 15, 'fecha_proximo_cobro' => '2026-11-05'])['fecha_proximo_cobro']);
+        // Una fecha nueva elegida a mano tiene que caer en el día nuevo.
+        $this->assertSame('2027-01-20', suscripciones_cliente_update($s['id'], ['dia_vencimiento' => 20, 'fecha_proximo_cobro' => '2027-01-20'])['fecha_proximo_cobro']);
+        $this->assertArrayHasKey('fecha_proximo_cobro', $this->errores422(fn() => suscripciones_cliente_update($s['id'], ['dia_vencimiento' => 3, 'fecha_proximo_cobro' => '2027-02-20'])));
+        // Mover la fecha sin cambiar el día también tiene que caer en el día.
+        $this->assertArrayHasKey('fecha_proximo_cobro', $this->errores422(fn() => suscripciones_cliente_update($s['id'], ['fecha_proximo_cobro' => '2027-02-21'])));
+    }
+
+    public function test_la_migracion_pasa_las_existentes_al_primer_5_sin_dejar_a_nadie_vencido(): void
+    {
+        $sql = (string)file_get_contents(dirname(__DIR__) . '/db/migrations/005_vencimiento_fijo.sql');
+        $update = array_values(array_filter(sql_split($sql), fn(string $x) => str_starts_with($x, 'UPDATE')))[0];
+        $casos = ['2026-12-01' => '2026-12-05', '2026-12-05' => '2026-12-05', '2026-12-06' => '2027-01-05',
+            '2026-12-20' => '2027-01-05', '2026-12-31' => '2027-01-05', '2027-01-31' => '2027-02-05'];
+        $ids = [];
+        foreach ($casos as $antes => $despues) {
+            $ids[$antes] = $this->alta(['fecha_proximo_cobro' => min($antes, substr($antes, 0, 8) . '28')])['id'];
+            db()->prepare('UPDATE suscripciones_cliente SET fecha_proximo_cobro = ? WHERE id = ?')->execute([$antes, $ids[$antes]]);
+        }
+        $sinFecha = $this->alta()['id'];
+        db()->prepare('UPDATE suscripciones_cliente SET fecha_proximo_cobro = NULL WHERE id = ?')->execute([$sinFecha]);
+
+        db()->exec($update);
+
+        foreach ($casos as $antes => $despues) {
+            $this->assertSame($despues, suscripciones_cliente_get($ids[$antes])['fecha_proximo_cobro'], "Desde $antes");
+        }
+        $this->assertNull(suscripciones_cliente_get($sinFecha)['fecha_proximo_cobro']);
     }
 
     public function test_obligatorios_de_cliente_y_plan(): void

@@ -6,6 +6,33 @@ const MODALIDADES = ['debito', 'transferencia'];
 const MONEDA_MP = 'ARS';
 /** Faltando esta cantidad de días o menos para "pago hasta", la suscripción figura como por vencer. */
 const COBRO_DIAS_POR_VENCER = 7;
+/** El día de vencimiento va de 1 a 28: el 28 existe en todos los meses (y el débito de Mercado Pago no acepta más). */
+const DIA_VENCIMIENTO_MAX = 28;
+
+/** La misma fecha 'YYYY-MM-DD' con otro día del mes. $dia va de 1 a 28, así que siempre existe. */
+function fecha_con_dia(string $fecha, int $dia): string
+{
+    return substr($fecha, 0, 8) . sprintf('%02d', $dia);
+}
+
+/** El primer día $dia igual o posterior a $fecha: '2026-11-20' con día 5 → '2026-12-05'. */
+function primer_vencimiento_desde(string $fecha, int $dia): string
+{
+    $mismoMes = fecha_con_dia($fecha, $dia);
+    return $mismoMes >= $fecha ? $mismoMes : fecha_con_dia(sumar_meses(substr($fecha, 0, 8) . '01', 1), $dia);
+}
+
+/** El próximo vencimiento tiene que caer en el día de vencimiento de la suscripción. */
+function suscripcion_validar_vencimiento(string $fecha, int $dia): void
+{
+    $diaFecha = (int)substr($fecha, 8, 2);
+    if ($diaFecha > DIA_VENCIMIENTO_MAX) {
+        throw new HttpError(422, 'Revisá los datos marcados', ['fecha_proximo_cobro' => 'El vencimiento tiene que ser un día del 1 al 28']);
+    }
+    if ($diaFecha !== $dia) {
+        throw new HttpError(422, 'Revisá los datos marcados', ['fecha_proximo_cobro' => "Tiene que caer el día $dia, el día de vencimiento"]);
+    }
+}
 
 /**
  * Cómo está una suscripción de cobro, calculado desde su "pago hasta" (fecha_proximo_cobro): vencido si ya pasó,
@@ -39,7 +66,8 @@ function suscripciones_cliente_schema(): array
         'monto' => ['type' => 'decimal', 'notnull' => true],
         'modalidad' => ['type' => 'enum', 'values' => MODALIDADES],
         'fecha_inicio' => ['type' => 'date', 'notnull' => true],
-        'fecha_proximo_cobro' => ['type' => 'date', 'required' => true],
+        'dia_vencimiento' => ['type' => 'int', 'min' => 1, 'max' => DIA_VENCIMIENTO_MAX, 'notnull' => true],
+        'fecha_proximo_cobro' => ['type' => 'date', 'notnull' => true],
     ];
 }
 
@@ -124,6 +152,10 @@ function suscripciones_cliente_create(array $input): array
     $datos['moneda'] = $plan['moneda'];
     $datos['monto'] ??= $plan['monto'];
     $datos['fecha_inicio'] ??= hoy();
+    // Por defecto vence el día del alta (o el del primer vencimiento, si se eligió uno); del 29 al 31, el 28.
+    $datos['dia_vencimiento'] ??= min(DIA_VENCIMIENTO_MAX, (int)substr($datos['fecha_proximo_cobro'] ?? $datos['fecha_inicio'], 8, 2));
+    $datos['fecha_proximo_cobro'] ??= primer_vencimiento_desde($datos['fecha_inicio'], $datos['dia_vencimiento']);
+    suscripcion_validar_vencimiento($datos['fecha_proximo_cobro'], $datos['dia_vencimiento']);
     suscripcion_validar_modalidad($datos, $modalidad);
     return suscripciones_cliente_get(crud_insert('suscripciones_cliente', $datos));
 }
@@ -142,8 +174,36 @@ function suscripciones_cliente_update(int $id, array $input): array
             ]);
         }
     }
+    $dia = $datos['dia_vencimiento'] ?? (int)$actual['dia_vencimiento'];
+    if ($dia !== (int)$actual['dia_vencimiento']) {
+        // Cambiar el día mueve el próximo vencimiento al día nuevo del mismo mes (salvo que también se haya elegido otra fecha).
+        $fecha = $datos['fecha_proximo_cobro'] ?? $actual['fecha_proximo_cobro'];
+        if ($fecha !== null && $fecha === $actual['fecha_proximo_cobro']) {
+            $datos['fecha_proximo_cobro'] = fecha_con_dia($fecha, $dia);
+        }
+        suscripcion_cambiar_dia_debito($actual, $dia);
+    }
+    if (isset($datos['fecha_proximo_cobro'])) {
+        suscripcion_validar_vencimiento($datos['fecha_proximo_cobro'], $dia);
+    }
     crud_update('suscripciones_cliente', $id, $datos);
     return suscripciones_cliente_get($id);
+}
+
+/**
+ * Con un débito vivo, el día nuevo se cambia también en Mercado Pago (billing_day, *a confirmar*). Si Mercado Pago no lo acepta,
+ * no se cambia nada: el admin tiene que pedir el débito de nuevo.
+ */
+function suscripcion_cambiar_dia_debito(array $s, int $dia): void
+{
+    if ($s['mp_preapproval_id'] === null || !in_array($s['mp_preapproval_estado'], DEBITO_EN_CURSO, true)) {
+        return;
+    }
+    try {
+        mp_actualizar_preapproval((string)$s['mp_preapproval_id'], ['auto_recurring' => ['billing_day' => $dia, 'billing_day_proportional' => false]]);
+    } catch (RuntimeException $e) {
+        throw suscripcion_mp_error($e);
+    }
 }
 
 function suscripciones_cliente_delete(int $id): void

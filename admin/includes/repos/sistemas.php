@@ -145,6 +145,8 @@ function sistema_cuenta(array $sistema): array
             'debito_activo' => $s['modalidad'] === 'debito' && $s['mp_preapproval_estado'] === 'autorizada',
             'estado' => $estado,
             'fecha_inicio' => $s['fecha_inicio'],
+            'dia_vencimiento' => (int)$s['dia_vencimiento'],
+            // Se llama pago_hasta por compatibilidad con los sistemas ya conectados: es el próximo vencimiento.
             'pago_hasta' => $s['fecha_proximo_cobro'],
             'cobro_estado' => $estado === 'activa' ? $e['estado'] : null,
             'cobro_dias' => $estado === 'activa' ? $e['dias'] : null,

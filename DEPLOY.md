@@ -315,3 +315,12 @@ Cada sistema que le hiciste a un cliente puede mostrarle, en su menú, el módul
 1. En la ficha del cliente → **Sistemas** → **+ Conectar sistema**: nombre, repo de GitHub y URL.
 2. Copiá las dos líneas que aparecen (`VEZZA_URL` y `VEZZA_TOKEN`) y pegalas en el `.env` del servidor del sistema. El token se muestra una sola vez: si lo perdés, **Generar token nuevo** (el anterior deja de funcionar).
 3. Reiniciá el sistema y entrá a **Acceder a VEZZA** con un usuario dueño. En la ficha del cliente, el sistema pasa a mostrar su **Último contacto**; si dice "Nunca se conectó", el sistema todavía no consultó (revisá las dos variables).
+
+## Vencimiento fijo de las suscripciones
+
+Cada suscripción vence un día fijo de cada mes (del 1 al 28). Su "próximo vencimiento" siempre cae ese día y cada pago lo corre un mes, aunque se pague tarde o antes. Lo que vence el 10 de diciembre cubre diciembre.
+
+1. **Hacé una copia de la base** y aplicá la migración `005_vencimiento_fijo` desde `/admin/migraciones`. Las suscripciones que ya existen pasan a vencer **el 5** y su próximo vencimiento pasa al primer 5 igual o posterior a la fecha que tenían (por ejemplo, 1/12 → 5/12 y 20/12 → 5/1): nadie queda vencido por el cambio.
+2. Revisá en **Cobros → Suscripciones mensuales** que las fechas hayan quedado como esperabas. Para otro día, **Editar** en la suscripción.
+3. Las altas nuevas vencen, por defecto, el día de la fecha de inicio (del 29 al 31, el 28). Se puede elegir otro día en el formulario.
+4. Con débito automático, Mercado Pago cobra el día de vencimiento (`billing_day`, *a confirmar con credenciales de prueba*). Cambiar el día de una suscripción con débito lo cambia también en Mercado Pago; si Mercado Pago no lo acepta, no se cambia nada.

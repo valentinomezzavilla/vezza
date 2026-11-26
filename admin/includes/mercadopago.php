@@ -119,6 +119,12 @@ function mp_crear_preapproval(array $suscripcion, string $emailCliente, ?string 
     if ($inicio !== null) {
         $recurrente['start_date'] = $inicio;
     }
+    // Vencimiento fijo: Mercado Pago cobra siempre el día de vencimiento de la suscripción, sin prorratear el primer mes.
+    // *A confirmar* los dos nombres (auto_recurring.billing_day, 1 a 28, y billing_day_proportional).
+    if (isset($suscripcion['dia_vencimiento'])) {
+        $recurrente['billing_day'] = (int)$suscripcion['dia_vencimiento'];
+        $recurrente['billing_day_proportional'] = false;
+    }
     $recurrente += [
         'transaction_amount' => (float)$suscripcion['monto'],
         'currency_id' => (string)($suscripcion['moneda'] ?? 'ARS') ?: 'ARS',

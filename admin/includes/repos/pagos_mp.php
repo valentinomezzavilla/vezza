@@ -290,7 +290,6 @@ function mp_pago_registrar(array $pago): array
         'moneda' => $s['moneda'],
         'metodo_pago' => 'Mercado Pago · débito',
         'mp_payment_id' => $pago['id'],
-        'avance' => 'fecha',
     ]);
     return ['resultado' => $r['resultado'], 'cobro_id' => $r['cobro_id'], 'sin_cobro' => false, 'error' => null];
 }

@@ -1,6 +1,6 @@
 # Vencimiento fijo y pagos desde el portal — Diseño
 
-Fecha: 2026-11-26. Estado: **propuesto**, pendiente de aprobación del usuario.
+Fecha: 2026-11-26. Estado: aprobado por el usuario en la conversación del 2026-11-26.
 
 Se apoya en `2026-11-25-pagos-estilo-vezzashop-design.md` (planes, suscripciones con monto propio, débito de Mercado Pago, registro manual, estado calculado desde "pago hasta"). Este diseño **cambia dos decisiones** de aquel: el portal de clientes ahora tiene una pantalla de pagos, y vuelve el pago único con Mercado Pago (Checkout Pro), esta vez lo inicia el cliente desde el portal y no hay links mensuales generados de antemano.
 

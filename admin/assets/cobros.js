@@ -18,7 +18,7 @@
     el('div', { class: 'stat-label', text: label }),
     el('div', { class: 'stat-valor', text: valor }));
 
-  // Quién está al día, por vencer o vencido, calculado desde "pago hasta" de cada suscripción.
+  // Quién está al día, por vencer o vencido, calculado desde el próximo vencimiento de cada suscripción.
   async function pintarSuscripciones(panel) {
     const { resumen, filas, debito_disponible: debitoDisponible } = await Panel.get('/api/suscripciones-mensuales', { cliente_id: fCliente.value });
     const recargar = () => pintarSuscripciones(panel).catch(Panel.manejarError);

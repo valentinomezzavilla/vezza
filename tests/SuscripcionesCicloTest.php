@@ -590,4 +590,43 @@ final class SuscripcionesCicloTest extends DbTestCase
         $this->assertSame([], $this->mails);
         $this->assertCount(1, $this->historial($s['id']));
     }
+
+    // ---- vencimiento fijo con débito ----
+
+    public function test_el_debito_nuevo_cobra_el_dia_de_vencimiento(): void
+    {
+        env_set('MP_ACCESS_TOKEN', 'TEST-123');
+        $this->mpRespuesta = ['id' => 'pre-9', 'init_point' => 'https://mp.test/pre-9'];
+        $s = $this->susc(['fecha_proximo_cobro' => '2026-04-05']);
+        suscripcion_pasar_a_debito($s['id']);
+        $recurrente = $this->llamadas[0][2]['auto_recurring'];
+        $this->assertSame(5, $recurrente['billing_day']);
+        $this->assertFalse($recurrente['billing_day_proportional']);
+        $this->assertSame('2026-04-05T12:00:00.000-03:00', $recurrente['start_date']);
+    }
+
+    public function test_cambiar_el_dia_con_debito_lo_cambia_en_mercado_pago(): void
+    {
+        $s = $this->conDebito('autorizada');
+        $this->mpRespuesta = [];
+        suscripciones_cliente_update($s['id'], ['dia_vencimiento' => 10]);
+        $this->assertSame(['PUT', '/preapproval/pre-1', ['auto_recurring' => ['billing_day' => 10, 'billing_day_proportional' => false]]], end($this->llamadas));
+        $this->assertSame('2026-04-10', $this->fila($s['id'])['fecha_proximo_cobro']);
+    }
+
+    public function test_si_mercado_pago_no_acepta_el_dia_no_se_cambia_nada(): void
+    {
+        $s = $this->conDebito('autorizada');
+        $this->mpCae = true;
+        $this->assertHttp(502, fn() => suscripciones_cliente_update($s['id'], ['dia_vencimiento' => 10]));
+        $this->assertSame(1, (int)$this->fila($s['id'])['dia_vencimiento']);
+        $this->assertSame('2026-04-01', $this->fila($s['id'])['fecha_proximo_cobro']);
+    }
+
+    public function test_cambiar_el_dia_sin_debito_no_llama_a_mercado_pago(): void
+    {
+        $s = $this->susc();
+        suscripciones_cliente_update($s['id'], ['dia_vencimiento' => 10]);
+        $this->assertSame([], $this->llamadas);
+    }
 }
