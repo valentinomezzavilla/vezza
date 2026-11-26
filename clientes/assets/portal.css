@@ -10,3 +10,12 @@ body { padding: 0; }
 .portal-auth-card > p { color: var(--muted); margin-bottom: 18px; }
 .portal-auth-card .btn-primario { width: 100%; }
 .portal-enlace { margin: 16px 0 0; text-align: center; font-size: .9rem; }
+
+/* Cuenta del cliente */
+.portal-main .page-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.portal-main .card h2 { font-size: 1.125rem; }
+.aviso-ok { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.aviso-warn { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.aviso-danger { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.portal-datos-transferencia { display: grid; gap: 8px; margin: 12px 0; }
+.portal-datos-transferencia code { font-size: 1rem; user-select: all; word-break: break-all; }
