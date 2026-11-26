@@ -1,7 +1,8 @@
 /* ==========================================================================
    VEZZA · interacciones
    Vanilla JS, sin dependencias. Todo responde a acciones de la persona;
-   la única animación automática (el hero) vive en CSS.
+   las únicas cosas que se mueven solas son el hero (en CSS) y el video de
+   VEZZA Shop, que se puede pausar y no arranca con "reducir movimiento".
    ========================================================================== */
 (function () {
   'use strict';
@@ -92,7 +93,11 @@
 
   /* ---------- 4. Servicios: desplegar la descripción ----------
      Se abre al pasar el mouse, al enfocar con teclado o al tocar.
-     Estado de cada fila = override (click/tap) ?? (hover || foco).     */
+     Estado de cada fila = override (click/tap) ?? (hover || foco).
+     La fila con data-sticky (E-commerce, con el video de VEZZA Shop) arranca
+     abierta y solo se abre o cierra con su propio clic: con un panel tan alto,
+     abrirla al pasar el mouse o cerrarla cuando se abre otra fila movería toda
+     la lista, y al tabular hacia el botón de pausa del video se cerraría sola. */
   function initServices() {
     var rows = Array.prototype.slice.call(document.querySelectorAll('[data-service]'));
     if (!rows.length) return;
@@ -109,17 +114,18 @@
 
     rows.forEach(function (row) {
       var button = row.querySelector('.service__toggle');
-      var s = { button: button, hover: false, focus: false, override: null, timer: 0 };
+      var sticky = row.hasAttribute('data-sticky');
+      var s = { button: button, hover: false, focus: false, override: sticky ? true : null, timer: 0 };
       state.set(row, s);
 
       row.addEventListener('pointerenter', function (e) {
-        if (e.pointerType !== 'mouse') return;
+        if (sticky || e.pointerType !== 'mouse') return;
         clearTimeout(s.timer);
         s.timer = setTimeout(function () { s.hover = true; sync(row); }, HOVER_DELAY);
       });
 
       row.addEventListener('pointerleave', function (e) {
-        if (e.pointerType !== 'mouse') return;
+        if (sticky || e.pointerType !== 'mouse') return;
         clearTimeout(s.timer);
         s.hover = false;
         if (!s.focus) s.override = null;
@@ -128,12 +134,13 @@
 
       // Solo foco de teclado (en touch, el tap también enfoca y lo maneja el click)
       button.addEventListener('focus', function () {
-        if (!button.matches(':focus-visible')) return;
+        if (sticky || !button.matches(':focus-visible')) return;
         s.focus = true;
         sync(row);
       });
 
       button.addEventListener('blur', function () {
+        if (sticky) return;
         s.focus = false;
         if (!s.hover) s.override = null;
         sync(row);
@@ -142,10 +149,11 @@
       button.addEventListener('click', function () {
         var isOpen = row.classList.contains('is-open');
         s.override = !isOpen;
-        // Al abrir una fila con tap/click, cierro las demás
+        // Al abrir una fila con tap/click, cierro las demás (menos la del video: al colapsar
+        // su panel la lista saltaría y la fila recién abierta se cerraría sola)
         if (!isOpen) {
           rows.forEach(function (other) {
-            if (other === row) return;
+            if (other === row || other.hasAttribute('data-sticky')) return;
             var o = state.get(other);
             o.override = null;
             o.hover = false;
@@ -315,9 +323,140 @@
     }
   }
 
+  /* ---------- 6. VEZZA Shop: el video que corresponde al ancho ----------
+     El CSS decide el formato (--shop-format en .shop__frame: 9x16, 4x5, 1x1 o
+     16x9). Acá se elige el archivo y se descarga recién cuando el video se
+     acerca a la pantalla. Con "reducir movimiento" o ahorro de datos no
+     arranca solo: queda el póster y la persona toca "Reproducir".          */
+  function initShopVideo() {
+    var frame = document.querySelector('[data-shop] .shop__frame');
+    var video = frame && frame.querySelector('[data-shop-video]');
+    var toggle = frame && frame.querySelector('[data-shop-toggle]');
+    if (!video || !toggle) return;
+
+    var version = frame.getAttribute('data-version') || '1';
+    var current = '';        // formato del póster / video que tiene el <video>
+    var hasSrc = false;      // ya se asignó un video (antes de eso no se descargó nada)
+    var userPaused = false;  // la persona lo pausó a mano
+    var autoPaused = false;  // se pausó solo porque salió de pantalla
+
+    function currentFormat() {
+      return getComputedStyle(frame).getPropertyValue('--shop-format').trim() || '16x9';
+    }
+    function fileFor(fmt, ext) {
+      return 'assets/video/vezza-shop-' + fmt + '.' + ext + '?v=' + version;
+    }
+    function autoplayAllowed() {
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var saveData = navigator.connection && navigator.connection.saveData;
+      return !reduce && !saveData;
+    }
+    function setLabel(playing) {
+      toggle.textContent = playing ? 'Pausar' : 'Reproducir';
+    }
+    function play() {
+      var promise = video.play();
+      // Si el navegador bloquea el autoplay (ahorro de batería, por ejemplo), queda en "Reproducir"
+      if (promise && promise.catch) promise.catch(function () { setLabel(false); });
+    }
+
+    // Cambia de formato: si ya había video, sigue en el mismo segundo (los cuatro duran lo mismo)
+    function load(fmt) {
+      var time = hasSrc ? video.currentTime : 0;
+      var resume = hasSrc && !video.paused;
+      current = fmt;
+      hasSrc = true;
+      toggle.hidden = false;
+      video.poster = fileFor(fmt, 'jpg');
+      video.src = fileFor(fmt, 'mp4');
+      if (time) {
+        video.addEventListener('loadedmetadata', function seek() {
+          video.removeEventListener('loadedmetadata', seek);
+          video.currentTime = time;
+        });
+      }
+      if (resume) play();
+    }
+
+    // Sin JS este botón no existe: el póster del 16:9 y el enlace alcanzan
+    current = currentFormat();
+    video.poster = fileFor(current, 'jpg');
+    setLabel(false);
+    toggle.hidden = false;
+
+    video.addEventListener('play', function () { setLabel(true); });
+    video.addEventListener('pause', function () { setLabel(false); });
+    video.addEventListener('error', function () { toggle.hidden = true; });
+
+    toggle.addEventListener('click', function () {
+      if (!hasSrc) {
+        userPaused = false;
+        load(currentFormat());
+        play();
+      } else if (video.paused) {
+        userPaused = false;
+        autoPaused = false;
+        play();
+      } else {
+        userPaused = true;
+        video.pause();
+      }
+    });
+
+    // Cambio de ancho (rotar el celular, achicar la ventana): otro formato
+    var resizing = false;
+    window.addEventListener('resize', function () {
+      if (resizing) return;
+      resizing = true;
+      requestAnimationFrame(function () {
+        resizing = false;
+        var fmt = currentFormat();
+        if (fmt === current) return;
+        if (hasSrc) {
+          load(fmt);
+        } else {
+          current = fmt;
+          video.poster = fileFor(fmt, 'jpg');
+        }
+      });
+    }, { passive: true });
+
+    function start() {
+      if (!autoplayAllowed()) return;
+      load(currentFormat());
+      play();
+    }
+
+    if (!('IntersectionObserver' in window)) { start(); return; }
+
+    // Se descarga cuando se ve y se queda a la vista un instante (300 ms), una sola vez.
+    // Así no baja nada si la persona solo pasa de largo, por ejemplo con el scroll
+    // suave de "Contanos tu idea" hasta el contacto.
+    var dwell = 0;
+    var near = new IntersectionObserver(function (entries) {
+      clearTimeout(dwell);
+      if (!entries[entries.length - 1].isIntersecting) return;
+      dwell = setTimeout(function () { near.disconnect(); start(); }, 300);
+    });
+    near.observe(frame);
+
+    // Mientras no se ve, se pausa; al volver sigue, salvo que la persona lo haya pausado
+    new IntersectionObserver(function (entries) {
+      var visible = entries[entries.length - 1].isIntersecting;
+      if (!hasSrc) return;
+      if (!visible) {
+        if (!video.paused) { autoPaused = true; video.pause(); }
+      } else if (autoPaused && !userPaused && autoplayAllowed()) {
+        autoPaused = false;
+        play();
+      }
+    }).observe(frame);
+  }
+
   initHeaderState();
   initMenu();
   initActiveLink();
   initServices();
   initForm();
+  initShopVideo();
 })();

@@ -501,9 +501,11 @@ html.menu-open { overflow: hidden; }
 .service.is-open .service__icon::after { transform: rotate(0deg); }
 
 /* Descripción desplegable. Sin JS se ve siempre. */
+/* --svc-indent: de dónde arranca el texto de la fila (alineado con el nombre del servicio) */
+.service__desc { --svc-indent: calc(2.75rem + var(--space-3)); }
 .service__desc > div { overflow: hidden; }
 .service__desc p {
-  padding: 0 0 clamp(1.25rem, 0.8rem + 1.6vw, 2rem) calc(2.75rem + var(--space-3));
+  padding: 0 0 clamp(1.25rem, 0.8rem + 1.6vw, 2rem) var(--svc-indent);
   font-size: var(--fs-lead);
   font-weight: 300;
   line-height: 1.45;
@@ -524,22 +526,88 @@ html.menu-open { overflow: hidden; }
   visibility: visible;
   transition: grid-template-rows var(--dur) var(--ease-out), visibility 0s;
 }
-.js .service__desc p {
+.js .service__desc p,
+.js .service__desc .shop {
   opacity: 0;
   transform: translateY(-4px);
   transition: opacity var(--dur-fast) ease, transform var(--dur) var(--ease-out);
 }
-.js .service.is-open .service__desc p {
+.js .service.is-open .service__desc p,
+.js .service.is-open .service__desc .shop {
   opacity: 1;
   transform: none;
   transition-delay: 60ms;
+}
+
+/* ---------- 9b. VEZZA Shop (dentro de la fila E-commerce) ---------- */
+/* Los cortes de ancho viven solo acá: --shop-format le dice a js/main.js
+   qué video cargar (9x16, 4x5, 1x1 o 16x9) y acá mismo se fija su proporción,
+   así la caja ya tiene su alto antes de que cargue nada. */
+.shop {
+  /* el margen chico deja ver el foco del botón, que .service__desc recorta (overflow) */
+  padding: 0 var(--space-1) clamp(1.25rem, 0.8rem + 1.6vw, 2rem);
+}
+@media (min-width: 48em) {
+  .shop { padding-left: var(--svc-indent); }
+}
+
+.shop__frame {
+  --shop-format: 9x16;
+  --shop-ratio: 3 / 4;     /* el 9:16 trae mucho aire arriba y abajo (pensado para historias): se muestra recortado al centro, sin perder contenido */
+  --shop-max: 22rem;
+
+  position: relative;
+  width: min(100%, var(--shop-max));
+  aspect-ratio: var(--shop-ratio);
+  overflow: hidden;
+  border-radius: var(--radius-card);
+}
+@media (min-width: 37.5em) {   /* 600px */
+  .shop__frame { --shop-format: 4x5; --shop-ratio: 4 / 5; --shop-max: 32rem; }
+}
+@media (min-width: 56.25em) {  /* 900px */
+  .shop__frame { --shop-format: 1x1; --shop-ratio: 1 / 1; --shop-max: 36rem; }
+}
+@media (min-width: 75em) {     /* 1200px */
+  .shop__frame { --shop-format: 16x9; --shop-ratio: 16 / 9; --shop-max: 100%; }
+}
+
+/* Los videos tienen el mismo crema que la página: van sin marco ni sombra */
+.shop__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Arriba a la izquierda: en los cuatro formatos ahí hay solo crema */
+.shop__toggle {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  min-height: 2.75rem;
+  padding: 0 1.1rem;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  line-height: 1;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.shop__toggle:hover { background: var(--ink); color: var(--bg); }
+
+.shop__actions {
+  display: flex;
+  margin-top: var(--space-5);
 }
 
 .services__outro { margin-top: clamp(var(--space-7), 5vw, var(--space-8)); max-width: none; }
 
 @media (min-width: 48em) {
   .service__toggle { grid-template-columns: 5.5rem 1fr auto; }
-  .service__desc p { padding-left: calc(5.5rem + var(--space-3)); }
+  .service__desc { --svc-indent: calc(5.5rem + var(--space-3)); }
 }
 
 /* ---------- 10. Proceso ---------- */

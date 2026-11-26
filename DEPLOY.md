@@ -30,8 +30,14 @@ public_html/
 ├── js/main.js
 └── assets/
     ├── icons/  (favicon.svg, favicon-32.png, apple-touch-icon.png)
-    └── img/    (og-image.png y las capturas de proyectos)
+    ├── img/    (og-image.png y las capturas de proyectos)
+    └── video/  (vezza-shop-9x16, 4x5, 1x1 y 16x9: un .mp4 y un .jpg de póster por formato)
 ```
+
+Los videos de la sección VEZZA Shop se arman desde `TIENDAS/` (que no se
+publica, está en `.gitignore`): recomprimí el original y dejá la copia en
+`assets/video/`. El navegador los guarda un año, así que si reemplazás uno,
+subí `data-version` en la fila E-commerce de `index.html` (`.shop__frame`).
 
 **No subas** `imgs/`, que son las piezas originales de la marca y quedan solo
 como referencia, ni este `DEPLOY.md`. Si lo subís por error, `.htaccess`

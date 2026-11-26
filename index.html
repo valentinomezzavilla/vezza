@@ -43,11 +43,11 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=Sora:wght@600&display=swap">
 
   <!-- Cambiá ?v= cada vez que subas una versión nueva del CSS o JS -->
-  <link rel="stylesheet" href="css/styles.css?v=1">
+  <link rel="stylesheet" href="css/styles.css?v=2">
 
   <!-- Marca que hay JS antes de pintar (evita parpadeos del menú y los servicios) -->
   <script>document.documentElement.className = 'js';</script>
-  <script src="js/main.js?v=1" defer></script>
+  <script src="js/main.js?v=2" defer></script>
 
   <!-- Datos estructurados -->
   <script type="application/ld+json">
@@ -67,9 +67,9 @@
       "@type": "OfferCatalog",
       "name": "Servicios",
       "itemListElement": [
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "E-commerce" } },
         { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Landing pages" } },
         { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Sitios web completos" } },
-        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "E-commerce" } },
         { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Apps web y móviles" } },
         { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Software a medida" } },
         { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Automatizaciones" } }
@@ -151,35 +151,52 @@
         <h2 class="label services__title" id="servicios-title">¿Qué hacemos?</h2>
 
         <ol class="services__list" role="list">
-          <li class="service" data-service>
+          <li class="service is-open" data-service data-sticky>
             <h3 class="service__heading">
-              <button class="service__toggle" type="button" aria-expanded="false" aria-controls="svc-1">
+              <button class="service__toggle" type="button" aria-expanded="true" aria-controls="svc-1">
                 <span class="service__num" aria-hidden="true">01</span>
-                <span class="service__name">Landing pages</span>
+                <span class="service__name">E-commerce</span>
                 <span class="service__icon" aria-hidden="true"></span>
               </button>
             </h3>
-            <div class="service__desc" id="svc-1"><div><p>Una página pensada para que quien entre te escriba, te compre o se anote.</p></div></div>
+            <div class="service__desc" id="svc-1"><div>
+              <p>Tu tienda online con pagos, envíos y stock en orden, sin depender de un marketplace. Armé VEZZA Shop para que vendas con tu propio link: catálogo, carrito, checkout y un panel para manejar pedidos y productos. Probala 7 días gratis.</p>
+
+              <!-- VEZZA Shop. Esta fila arranca abierta y se abre y cierra solo con clic (data-sticky).
+                   El CSS elige el formato del video según el ancho (variable --shop-format);
+                   js/main.js elige el archivo de assets/video/ y lo descarga recién cuando el
+                   video se ve. data-version: subilo si reemplazás un video o un póster
+                   (el navegador los guarda un año). -->
+              <div class="shop" data-shop>
+                <div class="shop__frame" data-version="1">
+                  <video class="shop__video" data-shop-video muted loop playsinline preload="none" poster="assets/video/vezza-shop-16x9.jpg" aria-label="Demostración de VEZZA Shop: una tienda online y su panel de pedidos"></video>
+                  <button class="shop__toggle" type="button" data-shop-toggle hidden>Pausar</button>
+                </div>
+                <div class="shop__actions">
+                  <a class="btn btn--primary btn--lg" href="https://tiendas.vezzadev.com">Conocer VEZZA Shop <span aria-hidden="true">→</span></a>
+                </div>
+              </div>
+            </div></div>
           </li>
           <li class="service" data-service>
             <h3 class="service__heading">
               <button class="service__toggle" type="button" aria-expanded="false" aria-controls="svc-2">
                 <span class="service__num" aria-hidden="true">02</span>
-                <span class="service__name">Sitios web completos</span>
+                <span class="service__name">Landing pages</span>
                 <span class="service__icon" aria-hidden="true"></span>
               </button>
             </h3>
-            <div class="service__desc" id="svc-2"><div><p>Tu negocio explicado en varias páginas, fácil de encontrar en Google y de actualizar.</p></div></div>
+            <div class="service__desc" id="svc-2"><div><p>Una página pensada para que quien entre te escriba, te compre o se anote.</p></div></div>
           </li>
           <li class="service" data-service>
             <h3 class="service__heading">
               <button class="service__toggle" type="button" aria-expanded="false" aria-controls="svc-3">
                 <span class="service__num" aria-hidden="true">03</span>
-                <span class="service__name">E-commerce</span>
+                <span class="service__name">Sitios web completos</span>
                 <span class="service__icon" aria-hidden="true"></span>
               </button>
             </h3>
-            <div class="service__desc" id="svc-3"><div><p>Tu tienda online con pagos, envíos y stock en orden, sin depender de un marketplace.</p></div></div>
+            <div class="service__desc" id="svc-3"><div><p>Tu negocio explicado en varias páginas, fácil de encontrar en Google y de actualizar.</p></div></div>
           </li>
           <li class="service" data-service>
             <h3 class="service__heading">

@@ -38,6 +38,7 @@ DirectoryIndex index.html
   AddType image/svg+xml .svg
   AddType image/avif .avif
   AddType image/webp .webp
+  AddType video/mp4 .mp4
   AddType application/manifest+json .webmanifest
   AddCharset utf-8 .html .css .js .xml .txt .svg
 </IfModule>
@@ -53,7 +54,8 @@ DirectoryIndex index.html
 # ---------- Caché ----------
 # HTML: siempre se revalida (ves los cambios al instante).
 # CSS/JS: 1 año, porque index.html los pide con ?v=N. Subí N en cada cambio.
-# Imágenes y fuentes: 1 año.
+# Imágenes, videos y fuentes: 1 año. Los videos y sus pósters se piden con ?v=N
+# (data-version de .shop__frame, en la fila E-commerce de index.html): subí N si cambiás un archivo.
 <IfModule mod_expires.c>
   ExpiresActive On
   ExpiresDefault "access plus 1 month"
@@ -69,6 +71,7 @@ DirectoryIndex index.html
   ExpiresByType image/webp "access plus 1 year"
   ExpiresByType image/avif "access plus 1 year"
   ExpiresByType image/x-icon "access plus 1 year"
+  ExpiresByType video/mp4 "access plus 1 year"
   ExpiresByType font/woff2 "access plus 1 year"
 </IfModule>
 
@@ -76,7 +79,7 @@ DirectoryIndex index.html
   <FilesMatch "\.html$">
     Header set Cache-Control "no-cache"
   </FilesMatch>
-  <FilesMatch "\.(css|js|svg|png|jpe?g|webp|avif|woff2)$">
+  <FilesMatch "\.(css|js|svg|png|jpe?g|webp|avif|mp4|woff2)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
 
