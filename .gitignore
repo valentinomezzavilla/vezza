@@ -4,3 +4,8 @@
 !.env.testing.example
 /vendor/
 .phpunit.cache/
+
+# Material de trabajo que no se publica (el deploy copia el repo entero a public_html)
+/.superpowers/
+/TIENDAS/
+/videos/
