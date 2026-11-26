@@ -339,3 +339,7 @@ Cada pago registrado de una suscripción (a mano, por débito o, más adelante, 
    ```
 3. El mail sale por el workflow "VEZZA · Mails del portal", que ya tiene la plantilla `comprobante_pago`. No hay que importar nada.
 4. En la ficha del cliente: cada cobro pagado muestra su comprobante con **Ver comprobante** y **Reenviar comprobante**; los cobros pagados sin comprobante (sueltos o anteriores) tienen **Emitir comprobante**. La pestaña **Comprobantes** lista todos, también los anulados.
+
+### Copia de los comprobantes en los sistemas
+
+Cada sistema conectado guarda una copia de los comprobantes de su cliente en su propia base: los pide a `/api/sistema-comprobantes` al arrancar, cada 6 horas y cada vez que alguien abre **Acceder a VEZZA**, y ahí aparecen en **Comprobantes de pago** (se imprimen o se guardan como PDF). Aplicá la migración `007_sistemas_comprobantes`. En la ficha del cliente, cada sistema muestra **Comprobantes al día** o cuántos le faltan copiar.

@@ -46,10 +46,13 @@ function sistema_validar(array $input, bool $parcial = false): array
     return $datos;
 }
 
-/** Lo que ve el admin de un sistema: nunca el hash del token, solo si tiene uno. */
+/** Lo que ve el admin de un sistema: nunca el hash del token, solo si tiene uno, y cuántos comprobantes le faltan copiar. */
 function sistema_publico(array $s): array
 {
     $s['conectado'] = $s['token_hash'] !== null;
+    $s['comprobantes_sin_copiar'] = (int)($s['comprobantes_copiados_hasta'] === null
+        ? q_val('SELECT COUNT(*) FROM comprobantes_pago WHERE cliente_id = ?', [(int)$s['cliente_id']])
+        : q_val('SELECT COUNT(*) FROM comprobantes_pago WHERE cliente_id = ? AND actualizado_en > ?', [(int)$s['cliente_id'], $s['comprobantes_copiados_hasta']]));
     unset($s['token_hash']);
     return $s;
 }
@@ -180,11 +183,66 @@ function sistema_cuenta(array $sistema): array
     ];
 }
 
+/** Cuántos comprobantes manda como mucho cada pedido de un sistema (si hay más, el sistema pide la página siguiente). */
+const SISTEMA_COMPROBANTES_POR_PAGINA = 200;
+
+/** El cursor de la copia: 'YYYY-MM-DD HH:MM:SS|id' del último cambio que el sistema ya tiene. Inválido → null (desde el principio). */
+function sistema_cursor_leer(string $cursor): ?array
+{
+    if (!preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\|(\d{1,10})$/', $cursor, $m)) {
+        return null;
+    }
+    return ['en' => $m[1], 'id' => (int)$m[2]];
+}
+
+/**
+ * Los comprobantes del cliente del sistema que cambiaron (se emitieron o se anularon) después del cursor, del más viejo al más
+ * nuevo, de a SISTEMA_COMPROBANTES_POR_PAGINA. El sistema guarda cada uno por número (si ya lo tiene, lo pisa: solo puede pasar a
+ * anulado), así que pedir dos veces lo mismo no duplica nada. Pedir con un cursor registra hasta dónde copió ese sistema.
+ * Sale solo lo que el cliente puede ver: la foto (sin ids internos), el número y si está anulado.
+ *
+ * @return array{comprobantes: list<array>, siguiente: ?string, hay_mas: bool}
+ */
+function sistema_comprobantes(array $sistema, string $desde): array
+{
+    $cursor = sistema_cursor_leer($desde);
+    if ($cursor !== null) {
+        db()->prepare('UPDATE sistemas SET comprobantes_copiados_hasta = ? WHERE id = ?')->execute([$cursor['en'], (int)$sistema['id']]);
+    }
+    $sql = 'SELECT * FROM comprobantes_pago WHERE cliente_id = ?';
+    $params = [(int)$sistema['cliente_id']];
+    if ($cursor !== null) {
+        $sql .= ' AND (actualizado_en > ? OR (actualizado_en = ? AND id > ?))';
+        array_push($params, $cursor['en'], $cursor['en'], $cursor['id']);
+    }
+    $filas = q_all($sql . ' ORDER BY actualizado_en, id LIMIT ' . (SISTEMA_COMPROBANTES_POR_PAGINA + 1), $params);
+    $hayMas = count($filas) > SISTEMA_COMPROBANTES_POR_PAGINA;
+    $filas = array_slice($filas, 0, SISTEMA_COMPROBANTES_POR_PAGINA);
+    $ultimo = end($filas);
+    return [
+        'comprobantes' => array_map(function (array $f): array {
+            $c = comprobante_pago_publico($f);
+            unset($c['datos']['cobro_id']);
+            return [
+                'numero' => $c['numero'],
+                'emitido_en' => $c['emitido_en'],
+                'anulado' => $c['anulado'],
+                'anulado_en' => $c['anulado_en'],
+                'motivo_anulacion' => $c['motivo_anulacion'],
+                'actualizado_en' => $c['actualizado_en'],
+                'datos' => $c['datos'],
+            ];
+        }, $filas),
+        'siguiente' => $ultimo === false ? ($cursor === null ? null : $desde) : $ultimo['actualizado_en'] . '|' . $ultimo['id'],
+        'hay_mas' => $hayMas,
+    ];
+}
+
 /**
  * El endpoint que consultan los sistemas: GET /api/sistema-cuenta con `Authorization: Bearer <token>`. No usa la sesión del admin
  * ni CSRF (lo llama el servidor del sistema, no un navegador). Un token que no existe da 401, sin decir por qué.
  */
-function sistema_api_run(): void
+function sistema_api_run(string $que = 'cuenta'): void
 {
     send_panel_headers();
     try {
@@ -196,7 +254,8 @@ function sistema_api_run(): void
             throw new HttpError(401, 'Token inválido');
         }
         sistema_registrar_contacto((int)$sistema['id']);
-        json_out(200, ['data' => sistema_cuenta($sistema)]);
+        $desde = is_string($_GET['desde'] ?? null) ? $_GET['desde'] : '';
+        json_out(200, ['data' => $que === 'comprobantes' ? sistema_comprobantes($sistema, $desde) : sistema_cuenta($sistema)]);
     } catch (HttpError $e) {
         json_out($e->status, ['error' => $e->getMessage()]);
     } catch (Throwable $e) {

@@ -80,6 +80,10 @@ const Sistemas = (() => {
       el('div', { class: 'item-top' },
         el('span', { class: 'item-titulo', text: s.nombre }),
         Panel.badge(texto, variante)),
+      el('div', { class: 'item-acciones' },
+        s.comprobantes_sin_copiar
+          ? Panel.badge(`Le ${s.comprobantes_sin_copiar === 1 ? 'falta copiar 1 comprobante' : `faltan copiar ${s.comprobantes_sin_copiar} comprobantes`}`, 'warn')
+          : Panel.badge('Comprobantes al día', 'ok')),
       el('div', { class: 'item-sub' },
         s.repo ? el('a', { href: `https://github.com/${s.repo}`, target: '_blank', rel: 'noopener', text: s.repo }) : 'Sin repo',
         s.url ? ' · ' : '',
