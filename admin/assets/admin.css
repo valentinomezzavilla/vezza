@@ -147,6 +147,8 @@ p { margin: 0 0 8px; }
 .campo.invalido input, .campo.invalido select, .campo.invalido textarea { border-color: var(--danger); }
 .form-error { background: var(--danger-soft); color: var(--danger); padding: 10px 12px; border-radius: 10px; margin-bottom: 12px; font-weight: 600; }
 .aviso { background: var(--accent-soft); color: var(--text); padding: 10px 12px; border-radius: 10px; margin-bottom: 12px; }
+.aviso-migraciones { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.aviso-migraciones a { color: inherit; }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; }
 .toolbar .filtro { width: auto; flex: 1 1 160px; }
 .toolbar .campo { flex: 1 1 150px; margin: 0; }

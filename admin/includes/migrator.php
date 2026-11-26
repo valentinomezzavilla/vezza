@@ -33,6 +33,30 @@ function migraciones_pendientes(PDO $pdo, ?string $dir = null): array
     return $pendientes;
 }
 
+/**
+ * Los nombres de las migraciones sin aplicar, solo leyendo (no crea la tabla `migraciones`). Nunca falla: si no se
+ * puede consultar la base devuelve [], porque se usa para avisar y no tiene que romper la pantalla que avisa.
+ */
+function migraciones_sin_aplicar(?PDO $pdo = null, ?string $dir = null): array
+{
+    try {
+        $hechas = ($pdo ?? db())->query('SELECT nombre FROM migraciones')->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable) {
+        return [];
+    }
+    $nombres = array_map(fn(string $a) => basename($a, '.sql'), glob(($dir ?? migraciones_dir()) . '/*.sql') ?: []);
+    sort($nombres);
+    return array_values(array_diff($nombres, $hechas));
+}
+
+/** El texto que se muestra cuando faltan migraciones: cuáles son y dónde aplicarlas. */
+function aviso_migraciones(array $pendientes): string
+{
+    return 'Hay ' . (count($pendientes) === 1 ? 'una migración pendiente' : count($pendientes) . ' migraciones pendientes')
+        . ' (' . implode(', ', $pendientes) . '). Aplicala' . (count($pendientes) === 1 ? '' : 's')
+        . ' desde Migraciones; hasta entonces algunas secciones pueden dar error.';
+}
+
 function migrar(PDO $pdo, ?string $dir = null): array
 {
     $aplicadas = [];

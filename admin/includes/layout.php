@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PANEL_ASSET_V = '6';
+const PANEL_ASSET_V = '7';
 
 const NAV_PRINCIPAL = [
     'inicio' => ['/admin', 'Inicio'],
@@ -126,6 +126,12 @@ function layout_start(string $titulo, string $activo, array $scripts = [], array
     <div class="page-actions" id="page-actions"></div>
   </header>
     <?php
+    // La pantalla de migraciones ya muestra la lista; en el resto se avisa arriba de todo.
+    $pendientes = $activo === 'migraciones' ? [] : migraciones_sin_aplicar();
+    if ($pendientes) {
+        echo '<div class="aviso aviso-migraciones" role="alert">' . e(aviso_migraciones($pendientes))
+            . ' <a href="/admin/migraciones">Ir a Migraciones</a></div>' . "\n";
+    }
 }
 
 function layout_end(): void

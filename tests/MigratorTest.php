@@ -37,4 +37,40 @@ final class MigratorTest extends TestCase
             rmdir($dir);
         }
     }
+
+    public function test_sin_aplicar_lista_las_que_faltan_sin_crear_nada(): void
+    {
+        db()->beginTransaction();
+        try {
+            $this->assertSame([], migraciones_sin_aplicar());
+            db()->prepare('DELETE FROM migraciones WHERE nombre IN (?, ?)')->execute(['003_pagos', '002_portal']);
+            $this->assertSame(['002_portal', '003_pagos'], migraciones_sin_aplicar());
+        } finally {
+            db()->rollBack();
+        }
+    }
+
+    public function test_aviso_nombra_las_migraciones(): void
+    {
+        $this->assertStringContainsString('una migración pendiente (003_pagos)', aviso_migraciones(['003_pagos']));
+        $this->assertStringContainsString('2 migraciones pendientes (003_monitor, 003_pagos)', aviso_migraciones(['003_monitor', '003_pagos']));
+    }
+
+    public function test_el_layout_avisa_si_faltan_migraciones_salvo_en_la_pantalla_de_migraciones(): void
+    {
+        $render = function (string $activo): string {
+            ob_start();
+            layout_start('Prueba', $activo);
+            return (string)ob_get_clean();
+        };
+        $this->assertStringNotContainsString('aviso-migraciones', $render('inicio'));
+        db()->beginTransaction();
+        try {
+            db()->prepare('DELETE FROM migraciones WHERE nombre = ?')->execute(['003_pagos']);
+            $this->assertStringContainsString('(003_pagos)', $render('inicio'));
+            $this->assertStringNotContainsString('aviso-migraciones', $render('migraciones'));
+        } finally {
+            db()->rollBack();
+        }
+    }
 }

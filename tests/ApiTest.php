@@ -81,4 +81,24 @@ final class ApiTest extends DbTestCase
         $h['list'] = fn() => throw new RuntimeException('detalle interno');
         $this->assertSame([500, ['error' => 'Error interno']], $this->llamar('GET', null, null, true, $h));
     }
+
+    public function test_error_de_base_con_migraciones_pendientes_dice_cuales_faltan(): void
+    {
+        db()->prepare('DELETE FROM migraciones WHERE nombre = ?')->execute(['003_pagos']);
+        $h = $this->handlers;
+        $h['create'] = fn() => throw new PDOException("SQLSTATE[42S22]: Column not found: 1054 Unknown column 'modalidad'");
+        [$status, $cuerpo] = $this->llamar('POST', null, '{}', true, $h);
+        $this->assertSame(500, $status);
+        $this->assertStringContainsString('003_pagos', $cuerpo['error']);
+        $this->assertStringContainsString('Migraciones', $cuerpo['error']);
+        $this->assertStringNotContainsString('modalidad', $cuerpo['error']);
+    }
+
+    public function test_error_que_no_es_de_base_sigue_siendo_generico_aunque_falten_migraciones(): void
+    {
+        db()->prepare('DELETE FROM migraciones WHERE nombre = ?')->execute(['003_pagos']);
+        $h = $this->handlers;
+        $h['list'] = fn() => throw new RuntimeException('detalle interno');
+        $this->assertSame([500, ['error' => 'Error interno']], $this->llamar('GET', null, null, true, $h));
+    }
 }

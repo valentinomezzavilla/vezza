@@ -20,7 +20,10 @@ function api_run(callable $fn): void
         json_out($e->status, $cuerpo);
     } catch (Throwable $e) {
         error_log('[panel] ' . $e);
-        json_out(500, ['error' => 'Error interno']);
+        // Un error de la base con migraciones sin aplicar casi siempre es una columna o tabla que todavía no existe:
+        // en vez del genérico, se dice qué falta aplicar.
+        $pendientes = $e instanceof PDOException ? migraciones_sin_aplicar() : [];
+        json_out(500, ['error' => $pendientes ? aviso_migraciones($pendientes) : 'Error interno']);
     }
 }
 
